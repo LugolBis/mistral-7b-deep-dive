@@ -65,7 +65,7 @@
 ]
 
 #slide(title: "Pre-fill", outlined: true)[
-  Dans l'exemple suivant $N = 6$ et $W = 2$ les tokens $t_i$ sont lu par les $Q_j$ avec $j in [j; j + W]$
+  Dans l'exemple suivant $N = 6$ et $W = 2$ les tokens $t_i$ sont lus par les $Q_j$ avec $j in [j; j + W]$
   #align(center)[#SWA]
 ]
 
