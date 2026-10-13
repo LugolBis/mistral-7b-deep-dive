@@ -44,16 +44,33 @@
 
 #slide(title: "Pre-fill", outlined: true)[
   *Qu'est ce que le _Pre-fill_* ?\
-  TODO
-]
+  Le _Pre-fill_ est la phase d'encodage des tokens (mots) extraits du prompt, en vecteurs de représentations.
+  Cet encodage se fait à partir des couches du modèles et donc des poids appris par celui-ci.\
+  \
+  On obtient donc pour chaque token, 3 vecteurs :
+  - $Q$ : Les "queries" utilisées pour rechercher les informations contextuelles pertinentes.
+  - $K$ : Les "keys" sont comparées avec chaque "query" pour calculer un score d'attention entre les tokens.
+  - $V$ : Les "values" contiennent les informations qui sont agrégées selon la pondération du score d'attention.
 
-#slide(title: "Pre-fill", outlined: true)[
-  *Chunking* :\
-  TODO
 ]
 
 #slide(title: "Pre-fill", outlined: true)[
   *SWA* :\
+  \
+  La formule de l'attention : $A = "softmax"((Q K^T) / sqrt(d_k))V$\
+  $->$ On a donc $O = A V$ qui correspond a $V$ aggrégé selon l'attention.\
+  \
+  Calculer le score d'attention agrégé pour tous les tokens est couteux en temps, il augmente de manière quadratique selon _N_.\
+  Le _*Sliding Window Attention*_ (*SWA*) résout ce problème en réduisant la fenêtre des clés $K$ comparées à une requête _Q_ pour chaque couche du modèle lors du calcul du score d'attention _A_.
+]
+
+#slide(title: "Pre-fill", outlined: true)[
+  Dans l'exemple suivant $N = 6$ et $W = 2$ les tokens $t_i$ sont lu par les $Q_j$ avec $j in [j; j + W]$
+  #align(center)[#SWA]
+]
+
+#slide(title: "Pre-fill", outlined: true)[
+  *Chunking* :\
   TODO
 ]
 

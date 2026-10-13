@@ -108,3 +108,94 @@
     )
   },
 )]
+
+#let SWA = [
+  #let build-diagram() = {
+    let tokens = ("The", "cat", "sat", "on", "the", "mat")
+    let layer-names = ("Input", "Layer 1", "Layer 2", "Output")
+    let W = 2
+    let n-tok = 6
+    let n-lay = 4
+    let focus = 5
+    let xs = 2
+    let ys = 0.6
+
+    let reaches = range(n-lay).map(L => {
+      let steps = n-lay - 1 - L
+      let start = calc.max(0, focus - W * steps)
+      range(start, focus + 1)
+    })
+    let in-cone(L, i) = i in reaches.at(L)
+
+    let red-fill = rgb("#E8401C")
+    let red-stroke = rgb("#A82712")
+    let pale-fill = rgb("#FBE5DC")
+    let pale-stroke = rgb("#D97742")
+    let gray-edge = rgb("#C4C4C4")
+    let blue-head = rgb("#3A6EA5")
+    let blue-dark = rgb("#21416E")
+    let elems = ()
+
+    for L in range(n-lay) {
+      for i in range(n-tok) {
+        let on = in-cone(L, i)
+        elems.push(node(
+          (L * xs, i * ys),
+          text(size: 8.5pt, weight: "bold", fill: if on { white } else { rgb("#222") })[t#i],
+          stroke: (if on { red-stroke } else { pale-stroke }) + 1.3pt,
+          fill: if on { red-fill } else { pale-fill },
+          inset: 7pt,
+          corner-radius: 50%,
+        ))
+      }
+    }
+
+    for L in range(n-lay) {
+      elems.push(node(
+        (L * xs, -0.5),
+        box(
+          fill: blue-head,
+          stroke: blue-dark + 0.8pt,
+          inset: (x: 10pt, y: 4pt),
+          radius: 4pt,
+          text(size: 9.5pt, weight: "bold", fill: white)[#layer-names.at(L)],
+        ),
+
+        inset: 0pt,
+      ))
+    }
+
+    for i in range(n-tok) {
+      elems.push(node(
+        (-0.5, i * ys),
+        text(size: 9pt, style: "italic", fill: rgb("#333"))[#tokens.at(i)],
+
+        inset: 0pt,
+      ))
+    }
+
+    for L in range(n-lay - 1) {
+      for i in range(n-tok) {
+        for j in range(calc.max(0, i - W), i + 1) {
+          let on = in-cone(L + 1, i) and in-cone(L, j)
+          elems.push(edge(
+            (L * xs, j * ys),
+            ((L + 1) * xs, i * ys),
+            marks: "->",
+            stroke: (if on { red-fill } else { gray-edge }) + (if on { 1.5pt } else { 0.5pt }),
+          ))
+        }
+      }
+    }
+
+    diagram(
+      node-stroke: none,
+      node-inset: 0pt,
+      axes: (ltr, ttb),
+      ..elems,
+    )
+  }
+
+
+  #build-diagram()
+]
