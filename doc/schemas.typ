@@ -199,3 +199,133 @@
 
   #build-diagram()
 ]
+
+#let PrefillCache = [
+  #diagram(
+    node-stroke: 0.6pt,
+    node-fill: white,
+    spacing: (1.5em, 2.8em),
+
+    node(
+      (0, 0),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*Chunk 1*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_1$], [$t_2$], [$t_3$], [$t_4$],
+          ),
+        )
+      ],
+      fill: rgb("#D7EBDD"),
+      name: <c1>,
+      inset: 10pt,
+    ),
+
+    node(
+      (1, 0),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*Chunk 2*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_5$], [$t_6$], [$t_7$], [$t_8$],
+          ),
+        )
+      ],
+      fill: rgb("#D7EBDD"),
+      name: <c2>,
+      inset: 10pt,
+    ),
+
+    node(
+      (2, 0),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*Chunk 3*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_9$], [$t_10$], [$t_11$], [$t_12$],
+          ),
+        )
+      ],
+      fill: rgb("#D7EBDD"),
+      name: <c3>,
+      inset: 10pt,
+    ),
+
+    node(
+      (0, 1),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*KV cache*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_1$], [$t_2$], [$t_3$], [$t_4$],
+          ),
+        )
+      ],
+      fill: rgb("#DCE6F7"),
+      name: <kv1>,
+      inset: 10pt,
+    ),
+
+    node(
+      (1, 1),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*KV cache*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_5$], [$t_6$], [$t_7$], [$t_8$],
+          ),
+        )
+      ],
+      fill: rgb("#DCE6F7"),
+      name: <kv2>,
+      inset: 10pt,
+    ),
+
+    node(
+      (2, 1),
+      [
+        #grid(
+          column-gutter: 5pt,
+          columns: 2,
+          [*KV cache*],
+          table(
+            inset: 7pt,
+            columns: 4,
+            [$t_9$], [$t_10$], [$t_11$], [$t_12$],
+          ),
+        )
+      ],
+      fill: rgb("#DCE6F7"),
+      name: <kv3>,
+      inset: 10pt,
+    ),
+
+    edge(<c1>, <kv1>, "->", label: [SWA], label-side: left),
+    edge(<c2>, <kv2>, "->", label: [SWA], label-side: left),
+    edge(<c3>, <kv3>, "->", label: [SWA], label-side: left),
+
+    edge(<kv1>, <c2>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
+
+    edge(<kv2>, <c3>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
+  )
+]

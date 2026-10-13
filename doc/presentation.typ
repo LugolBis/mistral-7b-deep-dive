@@ -65,13 +65,16 @@
 ]
 
 #slide(title: "Pre-fill", outlined: true)[
-  Dans l'exemple suivant $N = 6$ et $W = 2$ les tokens $t_i$ sont lus par les $Q_j$ avec $j in [j; j + W]$
+  Exemple : $N = 6$ et $W = 2$, les tokens $t_i$ sont lus par les $Q_j$ avec $j in [j; j + W]$
   #align(center)[#SWA]
 ]
 
 #slide(title: "Pre-fill", outlined: true)[
   *Chunking* :\
-  TODO
+  On découpe le prompt en chunks de _C_ tokens. Les calculs des scores d'attention des tokens d'un chunk peuvent alors être parallélisés, tout en respectant le masque causal et la *SWA*.\
+  \
+  _Mistral 7B_ fait le choix de poser : $C = W$. Cela permet de profiter du cache mémoire lors du calcul du score d'attention et plus particulièrement lorsque l'on passe d'un chunk à un autre.\
+  #PrefillCache
 ]
 
 #slide(title: "Cache KV", outlined: true)[
