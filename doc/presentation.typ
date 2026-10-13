@@ -112,6 +112,7 @@
     [head_dim], [128], [Dimension par tête d'attention],
     [n_kv_heads], [8 têtes], [Nombre de têtes clé/valeur (KV)],
     [window_size (#emph[W])], [4096 tokens], [Taille de la fenêtre glissante d'attention],
+    [chunk_size (#emph[C])], [4096 tokens], [Taille de la fenêtre glissante d'attention],
     [context_len], [8192 tokens], [Longueur de contexte],
     [vocab_size], [32000 tokens], [Taille du vocabulaire (nombre de tokens distinct)],
     [buffer_cache], [4096 tokens], [Taille du cache tampon circulaire],
