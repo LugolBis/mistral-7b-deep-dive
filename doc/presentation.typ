@@ -47,7 +47,7 @@
   Le _Pre-fill_ est la phase d'encodage des tokens (mots) extraits du prompt, en vecteurs de représentations.
   Cet encodage se fait à partir des couches du modèles et donc des poids appris par celui-ci.\
   \
-  On obtient donc pour chaque token, 3 vecteurs :
+  On obtient donc pour chaque token, 3 ensembles de vecteurs :
   - $Q$ : Les "queries" utilisées pour rechercher les informations contextuelles pertinentes.
   - $K$ : Les "keys" sont comparées avec chaque "query" pour calculer un score d'attention entre les tokens.
   - $V$ : Les "values" contiennent les informations qui sont agrégées selon la pondération du score d'attention.
