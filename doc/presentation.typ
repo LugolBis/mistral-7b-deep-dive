@@ -79,12 +79,17 @@
 
 #slide(title: "Cache KV", outlined: true)[
   *Qu'est ce que le cache KV* ?\
-  TODO
+  Le *KV* cache permet de mettre en cache les représentations vectorielles (*K* et *V*) des tokens du prompt pour chaque couche du modèle.\
+  \
+  Le cache *KV* est rempli durant la phase de _Pre-fill_ et peut être mis à jour lors de la phase d'encodage ou avant (voir ci-après).\
+  \
+  _Mistral 7B_ dispose de 8 têtes *KV* par couche du modèle, qui sont chacune utilisées par 4 têtes de requêtes (*Q*) $->$ c'est le *GQA*.
 ]
 
 #slide(title: "Cache KV", outlined: true)[
   *GQA* :\
-  TODO
+  Le _Grouped Query Attention_ consiste à regrouper des requêtes (*Q*) distinctes pour qu'elles partagent les mêmes vecteurs (*K*, *V*).\
+  #GQA
 ]
 
 #slide(title: "Cache KV", outlined: true)[
