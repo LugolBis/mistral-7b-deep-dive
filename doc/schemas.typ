@@ -277,7 +277,7 @@
           ),
         )
       ],
-      fill: rgb("#DCE6F7"),
+      fill: rgb("#5cbefb"),
       name: <kv1>,
       inset: 10pt,
     ),
@@ -296,7 +296,7 @@
           ),
         )
       ],
-      fill: rgb("#DCE6F7"),
+      fill: rgb("#5cbefb"),
       name: <kv2>,
       inset: 10pt,
     ),
@@ -315,7 +315,7 @@
           ),
         )
       ],
-      fill: rgb("#DCE6F7"),
+      fill: rgb("#5cbefb"),
       name: <kv3>,
       inset: 10pt,
     ),
@@ -327,5 +327,73 @@
     edge(<kv1>, <c2>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
 
     edge(<kv2>, <c3>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
+  )
+]
+
+#let GQA = [
+  #diagram(
+    node-stroke: 0.4pt,
+
+    for idx_left in range(8) {
+      let label_query = idx_left + 1
+      let node_q = (0.45 * idx_left, 0)
+      let node_kv = if calc.odd(idx_left) {
+        (0.45 * idx_left, 2.5)
+      } else {
+        (0.45 * idx_left, 2)
+      }
+
+      node(
+        node_q,
+        [$Q_(#label_query)$],
+        fill: rgb("#f4d2f9"),
+      )
+
+      node(
+        node_kv,
+        [$K_(#label_query)$,$V_(#label_query)$],
+        fill: rgb("#5cbefb"),
+      )
+
+      edge(
+        node_q,
+        node_kv,
+        "->",
+      )
+    },
+
+    edge(
+      (3.55, -0.5),
+      (3.55, 3),
+      "-",
+    ),
+
+    for idx_kv_right in range(2) {
+      let label_kv = idx_kv_right + 1
+      let node_kv = (4.5 + 1.8 * idx_kv_right, 2.5)
+
+      node(
+        node_kv,
+        [$K_(#label_kv)$,$V_(#label_kv)$],
+        fill: rgb("#5cbefb"),
+      )
+
+      for idx_q_right in range(4) {
+        let label_query = 4 * idx_kv_right + idx_q_right + 1
+        let node_q = (3.8 + 1.8 * idx_kv_right + 0.45 * idx_q_right, 1)
+
+        node(
+          node_q,
+          [$Q_(#label_query)$],
+          fill: rgb("#f4d2f9"),
+        )
+
+        edge(
+          node_q,
+          node_kv,
+          "->",
+        )
+      }
+    },
   )
 ]
