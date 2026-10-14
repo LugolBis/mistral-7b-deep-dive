@@ -368,9 +368,11 @@
       "-",
     ),
 
+    node((20cm, 9cm), [Avec *GQA* on a donc :], stroke: none),
+
     for idx_kv_right in range(2) {
       let label_kv = idx_kv_right + 1
-      let node_kv = (4.5 + 1.8 * idx_kv_right, 2.5)
+      let node_kv = (4.5 + 1.8 * idx_kv_right, 2.25)
 
       node(
         node_kv,
@@ -380,7 +382,7 @@
 
       for idx_q_right in range(4) {
         let label_query = 4 * idx_kv_right + idx_q_right + 1
-        let node_q = (3.8 + 1.8 * idx_kv_right + 0.45 * idx_q_right, 1)
+        let node_q = (3.8 + 1.8 * idx_kv_right + 0.45 * idx_q_right, 0.5)
 
         node(
           node_q,
