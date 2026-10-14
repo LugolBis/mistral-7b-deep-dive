@@ -94,7 +94,13 @@
 
 #slide(title: "Cache KV", outlined: true)[
   *Rolling Buffer* :\
-  TODO
+  Un cache de taille fixe de longueur $W$. On écrit donc le token $t_i$ à la position $i mod W$ du buffer cache.\
+  \
+  Étant donné que pour calculer les représentations (*Q*, *K*, *V*) d'un token $t_i$ nous n'avons besoin que des $W$ derniers tokens, cela signifie que nous n'avons pas besoin de garder les tokens précédents, qui ont déjà impacté les représentations (*Q*, *K*, *V*) des $W$ derniers tokens du *KV* cache.\
+  \
+  #underline()[Il y a propagation de l'information !]\
+  L'influence des tokens passés peut atteindre $1 + k (W-1)$ après $k$ couches.\
+  De plus la taille de la mémoire est linéaire en $O(min(N, W))$.
 ]
 
 #slide(title: "Décodage", outlined: true)[
