@@ -103,30 +103,39 @@
   De plus la taille de la mémoire est linéaire en $O(min(N, W))$.
 ]
 
+
 #slide(title: "Décodage", outlined: true)[
-  *Comment fonctionne la phase de décodage* ?\
+  *Comment fonctionne la phase de décodage ?*
 
-  Le *KV* cache construit pendant le _Pre-fill_ contient, pour chaque
-  couche, les clés $K$ et les valeurs $V$ des tokens déjà traités. À chaque étape de génération, on procède ainsi :
+  Le *KV* cache construit pendant le _Pre-fill_ contient, pour chaque couche, les clés $K$ et les valeurs $V$ des tokens déjà traités.
 
-  + À la fin du _Pre-fill_, les logits $l$ associés au dernier token du prompt permettent de sélectionner le premier token généré.
+  \
 
-  + Pour calculer la prédiction suivante, on transmet au modèle
-    le token généré à l'étape précédente. À chaque couche, le
-    modèle calcule ses ($Q$, $K$, $V$) et met à jour le *KV* cache.
+  *Initialisation : générer le premier token*
+
+  À la fin du _Pre-fill_, les logits $l_0$ de la dernière position
+  du prompt permettent de calculer la distribution du prochain token :
+  $p_"next_token" = "softmax"(l_0)$.\
+  On sélectionne alors le premier token $y_1$ selon la stratégie
+  de décodage choisie.
+]
+
+#slide(title: "Décodage", outlined: true)[
+  *Boucle de décodage : prédire chaque token suivant*
+
+  + On transmet le token courant $y_t$ au modèle. À chaque couche, le modèle calcule ses ($Q$, $K$, $V$) et met à jour le *KV* cache.
 
   + Le modèle calcule $O$ selon la *SWA*.
 
-  + Au terme du passage des différentes couches, le modèle dispose d'un vecteur caché $h$ représentant le contexte et le token courant.
+  + Le vecteur caché final $h_t$ est projeté sur le vocabulaire pour
+    produire les logits du token suivant :
+    $l_t = W_"vocab" h_t$.
 
-    On calcule alors les logits : $l = W_"out" h$.
+  + On calcule la distribution de probabilité des tokens candidats : $p_"next_token" = "softmax"(l)$. Puis on sélectionne le token $y_(t+1)$ selon la stratégie de décodage (glouton, échantillonnage, etc.).
 
-  + On calcule la distribution de probabilité des tokens candidats : $p_"next_token" = "softmax"(l)$.
-
-  + On choisit le token à partir de $p_"next_token"$ et d'un algorithme de décodage (glouton, échantillonage, etc.) et on réitère.
-
-  \
-  Notons que la phase de _Décodage_ (de génération de nouveaux tokens), prend fin lorsqu'un token de fin est généré ou qu'une limite de génération est atteinte.
+  + Si un token de fin est généré ou si une limite de génération
+    est atteinte, on arrête. Sinon, on transmet $y_(t+1)$ au modèle
+    et on répète la boucle.
 ]
 
 #slide(title: "Paramètres de Mistral 7B", outlined: true)[
