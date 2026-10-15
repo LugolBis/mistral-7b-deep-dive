@@ -104,13 +104,30 @@
 ]
 
 #slide(title: "Décodage", outlined: true)[
-  *Comment fonctionne la phase de _Décodage_* ?\
-  TODO
-]
+  *Comment fonctionne la phase de décodage* ?\
 
-#slide(title: "Décodage", outlined: true)[
-  *SWA* :\
-  TODO
+  Le *KV* cache construit pendant le _Pre-fill_ contient, pour chaque
+  couche, les clés $K$ et les valeurs $V$ des tokens déjà traités.\
+  À chaque étape de génération, on procède ainsi :
+
+  + À la fin du _Pre-fill_, les logits associés au dernier token
+    du prompt permettent de sélectionner le premier token généré.
+
+  + Pour calculer la prédiction suivante, on transmet au modèle
+    le token généré à l'étape précédente. À chaque couche, le
+    modèle calcule ses ($Q$, $K$, $V$) et met à jour le *KV* cache.
+
+  + Le modèle calcule $O$ selon la *SWA*.
+
+  + Au terme du passage des différentes couches, le modèle dispose d'un vecteur caché $h$ représentant le contexte et le token courant.
+    On calcule alors les logits : $l = W_"out" h$.
+
+  + On calcule la distribution de probabilité des tokens candidats : $p_"next_token" = "softmax"(l)$.
+
+  + On choisit le token à partir de $p_"next_token"$ et d'un algorithme de décodage (glouton, échantillonage, etc.) et on réitère.
+
+  \
+  Notons que la phase de _Décodage_ (de génération de nouveaux tokens), prend fin lorsqu'un token de fin est généré ou qu'une limite de génération est atteinte.
 ]
 
 #slide(title: "Paramètres de Mistral 7B", outlined: true)[
