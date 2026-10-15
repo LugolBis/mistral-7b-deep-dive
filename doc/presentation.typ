@@ -107,11 +107,9 @@
   *Comment fonctionne la phase de décodage* ?\
 
   Le *KV* cache construit pendant le _Pre-fill_ contient, pour chaque
-  couche, les clés $K$ et les valeurs $V$ des tokens déjà traités.\
-  À chaque étape de génération, on procède ainsi :
+  couche, les clés $K$ et les valeurs $V$ des tokens déjà traités. À chaque étape de génération, on procède ainsi :
 
-  + À la fin du _Pre-fill_, les logits associés au dernier token
-    du prompt permettent de sélectionner le premier token généré.
+  + À la fin du _Pre-fill_, les logits $l$ associés au dernier token du prompt permettent de sélectionner le premier token généré.
 
   + Pour calculer la prédiction suivante, on transmet au modèle
     le token généré à l'étape précédente. À chaque couche, le
@@ -120,6 +118,7 @@
   + Le modèle calcule $O$ selon la *SWA*.
 
   + Au terme du passage des différentes couches, le modèle dispose d'un vecteur caché $h$ représentant le contexte et le token courant.
+
     On calcule alors les logits : $l = W_"out" h$.
 
   + On calcule la distribution de probabilité des tokens candidats : $p_"next_token" = "softmax"(l)$.
