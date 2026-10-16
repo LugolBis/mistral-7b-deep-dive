@@ -6,6 +6,8 @@ from src.model import (
     GroupedQueryAttention,
     RMSNorm,
     RotaryPositionalEmbedding,
+    SwiGLU,
+    TransformerBlock,
 )
 
 
@@ -155,6 +157,71 @@ class GroupedQueryAttentionTests(unittest.TestCase):
         result = attention(values, position_ids=torch.tensor([10, 11]))
 
         torch.testing.assert_close(result[0, 1, 0], torch.tensor(2.0))
+
+
+class SwiGLUTests(unittest.TestCase):
+    def test_preserves_batch_and_sequence_dimensions(self) -> None:
+        network = SwiGLU(dim=8, hidden_dim=16)
+
+        result = network(torch.randn(2, 5, 8))
+
+        self.assertEqual(result.shape, (2, 5, 8))
+
+    def test_parameters_receive_gradients(self) -> None:
+        network = SwiGLU(dim=4, hidden_dim=8)
+        values = torch.randn(2, 3, 4, requires_grad=True)
+
+        network(values).square().sum().backward()
+
+        self.assertIsNotNone(values.grad)
+        self.assertTrue(torch.isfinite(values.grad).all())
+        for parameter in network.parameters():
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+
+
+class TransformerBlockTests(unittest.TestCase):
+    def test_preserves_shape_and_accepts_absolute_positions(self) -> None:
+        block = TransformerBlock(
+            dim=8,
+            n_heads=4,
+            n_kv_heads=2,
+            window_size=3,
+            hidden_dim=16,
+        )
+
+        result = block(torch.randn(2, 4, 8), position_ids=torch.arange(10, 14))
+
+        self.assertEqual(result.shape, (2, 4, 8))
+
+    def test_gradients_flow_through_both_residual_branches(self) -> None:
+        block = TransformerBlock(
+            dim=8,
+            n_heads=4,
+            n_kv_heads=2,
+            window_size=3,
+            hidden_dim=16,
+        )
+        values = torch.randn(1, 3, 8, requires_grad=True)
+
+        block(values).square().sum().backward()
+
+        self.assertIsNotNone(values.grad)
+        self.assertTrue(torch.isfinite(values.grad).all())
+        self.assertIsNotNone(block.attention.q_proj.weight.grad)
+        self.assertIsNotNone(block.feed_forward.gate_proj.weight.grad)
+
+    def test_rejects_non_sequence_input(self) -> None:
+        block = TransformerBlock(
+            dim=8,
+            n_heads=4,
+            n_kv_heads=2,
+            window_size=3,
+            hidden_dim=16,
+        )
+
+        with self.assertRaises(ValueError):
+            block(torch.randn(2, 8))
 
 
 if __name__ == "__main__":

@@ -186,3 +186,63 @@ class GroupedQueryAttention(nn.Module):
         )
         return self.out_proj(attended)
 
+
+class SwiGLU(nn.Module):
+    """Gated feed-forward network used in the Transformer block."""
+
+    def __init__(self, dim: int, hidden_dim: int) -> None:
+        super().__init__()
+        if dim <= 0 or hidden_dim <= 0:
+            raise ValueError("dim and hidden_dim must be positive")
+
+        self.gate_proj = nn.Linear(dim, hidden_dim, bias=False)
+        self.up_proj = nn.Linear(dim, hidden_dim, bias=False)
+        self.down_proj = nn.Linear(hidden_dim, dim, bias=False)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if not x.is_floating_point():
+            raise TypeError("SwiGLU input must have a floating-point dtype")
+        if x.ndim == 0 or x.shape[-1] != self.gate_proj.in_features:
+            raise ValueError(
+                f"Expected input's last dimension to be {self.gate_proj.in_features}"
+            )
+
+        gate = torch.nn.functional.silu(self.gate_proj(x))
+        value = self.up_proj(x)
+        return self.down_proj(gate * value)
+
+
+class TransformerBlock(nn.Module):
+    """Pre-normalized Mistral-style attention and feed-forward block."""
+
+    def __init__(
+        self,
+        dim: int,
+        n_heads: int,
+        n_kv_heads: int,
+        window_size: int,
+        hidden_dim: int,
+        norm_eps: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        if dim <= 0 or hidden_dim <= 0:
+            raise ValueError("dim and hidden_dim must be positive")
+
+        self.attention_norm = RMSNorm(dim, eps=norm_eps)
+        self.attention = GroupedQueryAttention(
+            dim=dim,
+            n_heads=n_heads,
+            n_kv_heads=n_kv_heads,
+            window_size=window_size,
+        )
+        self.feed_forward_norm = RMSNorm(dim, eps=norm_eps)
+        self.feed_forward = SwiGLU(dim=dim, hidden_dim=hidden_dim)
+
+    def forward(self, x: Tensor, position_ids: Tensor | None = None) -> Tensor:
+        if not x.is_floating_point():
+            raise TypeError("TransformerBlock input must have a floating-point dtype")
+        if x.ndim != 3:
+            raise ValueError("TransformerBlock input must have shape (batch, seq, dim)")
+
+        x = x + self.attention(self.attention_norm(x), position_ids)
+        return x + self.feed_forward(self.feed_forward_norm(x))

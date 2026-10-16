@@ -1,6 +1,6 @@
 import torch
 
-from model import GroupedQueryAttention, RMSNorm, RotaryPositionalEmbedding
+from model import RMSNorm, RotaryPositionalEmbedding, TransformerBlock
 
 
 if __name__ == "__main__":
@@ -12,8 +12,12 @@ if __name__ == "__main__":
     positional_sample = torch.tensor([[[[1.0, 0.0, 1.0, 0.0]]]])
     print(f"RoPE output: {rope(positional_sample, torch.tensor([1]))}")
 
-    attention = GroupedQueryAttention(
-        dim=128, n_heads=4, n_kv_heads=2, window_size=4
+    block = TransformerBlock(
+        dim=128,
+        n_heads=4,
+        n_kv_heads=2,
+        window_size=4,
+        hidden_dim=256,
     )
     tokens = torch.randn(1, 6, 128)
-    print(f"Attention output shape: {attention(tokens).shape}")
+    print(f"Transformer block output shape: {block(tokens).shape}")
