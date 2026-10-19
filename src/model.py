@@ -445,8 +445,9 @@ class MiniMistralDecoder(nn.Module):
         use_cache: bool = True,
         prefill_chunk_size: int | None = None,
         temperature: float = 0.0,
+        top_k: int | None = None,
     ) -> Tensor:
-        """Generate tokens greedily or by temperature sampling."""
+        """Generate greedily or sample using temperature and optional top-k."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -463,6 +464,10 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("chunked prefill requires use_cache=True")
         if not math.isfinite(temperature) or temperature < 0:
             raise ValueError("temperature must be a finite, non-negative number")
+        if top_k is not None and (
+            not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0
+        ):
+            raise ValueError("top_k must be a positive integer")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -489,6 +494,16 @@ class MiniMistralDecoder(nn.Module):
             if temperature == 0:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)
             else:
+                if top_k is not None:
+                    top_indices = next_token_logits.topk(
+                        min(top_k, next_token_logits.shape[-1]), dim=-1
+                    ).indices
+                    filtered_logits = torch.full_like(
+                        next_token_logits, float("-inf")
+                    )
+                    next_token_logits = filtered_logits.scatter(
+                        -1, top_indices, next_token_logits.gather(-1, top_indices)
+                    )
                 probabilities = torch.softmax(
                     next_token_logits / temperature, dim=-1
                 )

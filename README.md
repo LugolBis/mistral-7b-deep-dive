@@ -15,8 +15,10 @@ chunks with `prefill_chunk_size`, while preserving its absolute token positions
 and reusing the rolling cache between chunks. Generation is greedy by default;
 set a positive `temperature` to sample from the next-token probabilities.
 Higher temperatures make the distribution less concentrated, while zero keeps
-greedy selection. The project does not yet include a tokenizer, and its
-weights are randomly initialized rather than pretrained.
+greedy selection. Sampling can be restricted to the `top_k` highest-scoring
+tokens; if `top_k` exceeds the vocabulary size, all tokens remain eligible.
+The project does not yet include a tokenizer, and its weights are randomly
+initialized rather than pretrained.
 
 ## Repository structure
 

@@ -426,6 +426,52 @@ class MiniMistralDecoderTests(unittest.TestCase):
         self.assertEqual(generated[0, -1].item(), 5)
         multinomial.assert_not_called()
 
+    def test_top_k_sampling_assigns_probability_only_to_top_logits(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, :5] = torch.tensor([5.0, 4.0, 3.0, 2.0, 1.0])
+        sampled = torch.tensor([[1]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            generated = model.generate(
+                prompt, max_new_tokens=1, temperature=1.0, top_k=3
+            )
+
+        probabilities = multinomial.call_args.args[0]
+        torch.testing.assert_close(generated[:, -1:], sampled)
+        self.assertTrue(torch.all(probabilities[0, :3] > 0))
+        self.assertTrue(torch.all(probabilities[0, 3:] == 0))
+        torch.testing.assert_close(probabilities.sum(), torch.tensor(1.0))
+
+    def test_top_k_larger_than_vocabulary_keeps_all_tokens(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.zeros(1, 2, 32)
+        sampled = torch.tensor([[1]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            model.generate(
+                prompt, max_new_tokens=1, temperature=1.0, top_k=100
+            )
+
+        self.assertTrue(torch.all(multinomial.call_args.args[0] > 0))
+
+    def test_rejects_invalid_top_k(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+
+        for top_k in (0, -1):
+            with self.subTest(top_k=top_k):
+                with self.assertRaises(ValueError):
+                    model.generate(prompt, max_new_tokens=1, top_k=top_k)
+
     def test_rejects_invalid_temperature(self) -> None:
         model = self.create_model()
         prompt = torch.tensor([[1, 2]])
