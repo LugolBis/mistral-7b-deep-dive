@@ -411,6 +411,39 @@ class MiniMistralDecoderTests(unittest.TestCase):
         )
         self.assertEqual(multinomial.call_args.kwargs["num_samples"], 1)
 
+    def test_generator_makes_sampling_reproducible(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2, 3]])
+
+        first = model.generate(
+            prompt,
+            max_new_tokens=8,
+            temperature=1.0,
+            generator=torch.Generator().manual_seed(1234),
+        )
+        second = model.generate(
+            prompt,
+            max_new_tokens=8,
+            temperature=1.0,
+            generator=torch.Generator().manual_seed(1234),
+        )
+
+        torch.testing.assert_close(first, second)
+
+    def test_explicit_generator_does_not_advance_global_rng(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        global_rng_state = torch.get_rng_state()
+
+        model.generate(
+            prompt,
+            max_new_tokens=3,
+            temperature=1.0,
+            generator=torch.Generator().manual_seed(1234),
+        )
+
+        torch.testing.assert_close(torch.get_rng_state(), global_rng_state)
+
     def test_zero_temperature_keeps_greedy_generation(self) -> None:
         model = self.create_model()
         prompt = torch.tensor([[1, 2]])

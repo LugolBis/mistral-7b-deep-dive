@@ -19,8 +19,11 @@ greedy selection. Sampling can be restricted to the `top_k` highest-scoring
 tokens; if `top_k` exceeds the vocabulary size, all tokens remain eligible.
 The `top_p` option (nucleus sampling) instead keeps the smallest set of tokens
 whose cumulative probability reaches the requested threshold; it can be
-combined with `top_k`. The project does not yet include a tokenizer, and its
-weights are randomly initialized rather than pretrained.
+combined with `top_k`. For repeatable sampling, pass an explicitly seeded
+`torch.Generator`, for example `generator=torch.Generator().manual_seed(1234)`.
+This keeps sampling independent of PyTorch's global random-number state. The
+project does not yet include a tokenizer, and its weights are randomly
+initialized rather than pretrained.
 
 ## Repository structure
 

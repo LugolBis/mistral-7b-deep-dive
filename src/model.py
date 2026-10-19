@@ -447,6 +447,7 @@ class MiniMistralDecoder(nn.Module):
         temperature: float = 0.0,
         top_k: int | None = None,
         top_p: float = 1.0,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
         """Generate greedily or sample using temperature, top-k, and top-p."""
         if token_ids.ndim != 2:
@@ -471,6 +472,8 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("top_k must be a positive integer")
         if not math.isfinite(top_p) or not 0 < top_p <= 1:
             raise ValueError("top_p must be a finite number in (0, 1]")
+        if generator is not None and not isinstance(generator, torch.Generator):
+            raise TypeError("generator must be a torch.Generator")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -497,6 +500,10 @@ class MiniMistralDecoder(nn.Module):
             if temperature == 0:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)
             else:
+                if generator is not None and generator.device != next_token_logits.device:
+                    raise ValueError(
+                        "sampling generator and logits must use the same device"
+                    )
                 if top_k is not None:
                     top_indices = next_token_logits.topk(
                         min(top_k, next_token_logits.shape[-1]), dim=-1
@@ -527,7 +534,9 @@ class MiniMistralDecoder(nn.Module):
                     probabilities = probabilities / probabilities.sum(
                         dim=-1, keepdim=True
                     )
-                next_token = torch.multinomial(probabilities, num_samples=1)
+                next_token = torch.multinomial(
+                    probabilities, num_samples=1, generator=generator
+                )
 
             if eos_token_id is not None:
                 next_token = torch.where(
