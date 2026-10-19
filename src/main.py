@@ -25,3 +25,5 @@ if __name__ == "__main__":
     logits = model(token_ids)
     print(f"Logits shape: {logits.shape}")
     print(f"Highest-scoring next token ID: {logits[0, -1].argmax().item()}")
+    generated = model.generate(token_ids, max_new_tokens=5)
+    print(f"Generated token IDs: {generated[0].tolist()}")

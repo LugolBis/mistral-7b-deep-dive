@@ -6,9 +6,9 @@ The project is also building an educational, from-scratch Python reimplementatio
 of the Mistral 7B decoder. It is currently in progress: token embeddings,
 RMSNorm, RoPE, causal Grouped-Query Sliding-Window Attention, SwiGLU, and a
 pre-normalized Transformer block with residual connections are implemented,
-along with an educational decoder that produces next-token logits. It does not
-yet include a tokenizer, KV cache, or text-generation loop, and its weights are
-randomly initialized rather than pretrained.
+along with an educational decoder that produces next-token logits and performs
+greedy generation. It does not yet include a tokenizer or KV cache, and its
+weights are randomly initialized rather than pretrained.
 
 ## Repository structure
 

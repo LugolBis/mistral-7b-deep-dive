@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -329,6 +330,70 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model(torch.empty((1, 0), dtype=torch.long))
+
+    def test_greedy_generation_appends_requested_number_of_tokens(self) -> None:
+        model = self.create_model()
+        with torch.no_grad():
+            model.lm_head.weight.zero_()
+        prompt = torch.tensor([[4, 7]])
+
+        generated = model.generate(prompt, max_new_tokens=3)
+
+        self.assertEqual(generated.shape, (1, 5))
+        torch.testing.assert_close(generated[:, :2], prompt)
+        torch.testing.assert_close(generated[:, 2:], torch.zeros((1, 3), dtype=torch.long))
+
+    def test_stops_when_eos_token_is_generated(self) -> None:
+        model = self.create_model()
+        with torch.no_grad():
+            model.lm_head.weight.zero_()
+
+        generated = model.generate(
+            torch.tensor([[4, 7]]), max_new_tokens=5, eos_token_id=0
+        )
+
+        self.assertEqual(generated.shape, (1, 3))
+        self.assertEqual(generated[0, -1].item(), 0)
+
+    def test_finished_rows_keep_eos_while_other_batch_rows_continue(self) -> None:
+        model = self.create_model()
+
+        def predictable_logits(token_ids: torch.Tensor, **_: torch.Tensor) -> torch.Tensor:
+            logits = torch.zeros(token_ids.shape[0], token_ids.shape[1], 32)
+            for row, prompt_id in enumerate(token_ids[:, 0].tolist()):
+                if prompt_id == 1 or token_ids.shape[1] == 3:
+                    logits[row, -1, 0] = 1.0
+                else:
+                    logits[row, -1, 3] = 1.0
+            return logits
+
+        with patch.object(model, "forward", side_effect=predictable_logits):
+            generated = model.generate(
+                torch.tensor([[1], [2]]), max_new_tokens=5, eos_token_id=0
+            )
+
+        self.assertEqual(generated.shape, (2, 4))
+        torch.testing.assert_close(
+            generated[0], torch.tensor([1, 0, 0, 0], dtype=torch.long)
+        )
+        torch.testing.assert_close(
+            generated[1], torch.tensor([2, 3, 3, 0], dtype=torch.long)
+        )
+
+    def test_zero_new_tokens_returns_prompt_unchanged(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[4, 7]])
+
+        generated = model.generate(prompt, max_new_tokens=0)
+
+        torch.testing.assert_close(generated, prompt)
+        self.assertIsNot(generated, prompt)
+
+    def test_rejects_negative_generation_length(self) -> None:
+        model = self.create_model()
+
+        with self.assertRaises(ValueError):
+            model.generate(torch.tensor([[1]]), max_new_tokens=-1)
 
 
 if __name__ == "__main__":

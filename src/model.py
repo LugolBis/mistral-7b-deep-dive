@@ -319,3 +319,46 @@ class MiniMistralDecoder(nn.Module):
             hidden_states = layer(hidden_states, position_ids)
         hidden_states = self.final_norm(hidden_states)
         return self.lm_head(hidden_states)
+
+    @torch.inference_mode()
+    def generate(
+        self,
+        token_ids: Tensor,
+        max_new_tokens: int,
+        eos_token_id: int | None = None,
+    ) -> Tensor:
+        """Greedily append tokens, recomputing the full context at each step."""
+        if token_ids.ndim != 2:
+            raise ValueError("token_ids must have shape (batch, seq)")
+        if token_ids.shape[1] == 0:
+            raise ValueError("token_ids must contain at least one token")
+        if token_ids.dtype not in (torch.int32, torch.int64):
+            raise TypeError("token_ids must have dtype torch.int32 or torch.int64")
+        if max_new_tokens < 0:
+            raise ValueError("max_new_tokens must be non-negative")
+        if eos_token_id is not None and not 0 <= eos_token_id < self.vocab_size:
+            raise ValueError("eos_token_id must be within the vocabulary")
+
+        generated = token_ids.clone()
+        finished = torch.zeros(
+            token_ids.shape[0], dtype=torch.bool, device=token_ids.device
+        )
+
+        for _ in range(max_new_tokens):
+            positions = torch.arange(generated.shape[1], device=generated.device)
+            logits = self(generated, position_ids=positions)
+            next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
+
+            if eos_token_id is not None:
+                next_token = torch.where(
+                    finished[:, None],
+                    torch.full_like(next_token, eos_token_id),
+                    next_token,
+                )
+                finished |= next_token.squeeze(-1).eq(eos_token_id)
+
+            generated = torch.cat((generated, next_token), dim=1)
+            if eos_token_id is not None and finished.all():
+                break
+
+        return generated
