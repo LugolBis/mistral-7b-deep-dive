@@ -267,3 +267,55 @@ class TokenEmbedding(nn.Module):
             raise TypeError("token_ids must have dtype torch.int32 or torch.int64")
 
         return self.embedding(token_ids)
+
+
+class MiniMistralDecoder(nn.Module):
+    """Educational decoder that maps token IDs to next-token logits."""
+
+    def __init__(
+        self,
+        vocab_size: int,
+        dim: int,
+        n_layers: int,
+        n_heads: int,
+        n_kv_heads: int,
+        window_size: int,
+        hidden_dim: int,
+        norm_eps: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        if n_layers <= 0:
+            raise ValueError("n_layers must be positive")
+
+        self.vocab_size = vocab_size
+        self.dim = dim
+        self.token_embedding = TokenEmbedding(vocab_size=vocab_size, dim=dim)
+        self.layers = nn.ModuleList(
+            TransformerBlock(
+                dim=dim,
+                n_heads=n_heads,
+                n_kv_heads=n_kv_heads,
+                window_size=window_size,
+                hidden_dim=hidden_dim,
+                norm_eps=norm_eps,
+            )
+            for _ in range(n_layers)
+        )
+        self.final_norm = RMSNorm(dim, eps=norm_eps)
+        self.lm_head = nn.Linear(dim, vocab_size, bias=False)
+
+    def forward(
+        self, token_ids: Tensor, position_ids: Tensor | None = None
+    ) -> Tensor:
+        if token_ids.ndim != 2:
+            raise ValueError("token_ids must have shape (batch, seq)")
+        if token_ids.shape[1] == 0:
+            raise ValueError("token_ids must contain at least one token")
+        if token_ids.dtype not in (torch.int32, torch.int64):
+            raise TypeError("token_ids must have dtype torch.int32 or torch.int64")
+
+        hidden_states = self.token_embedding(token_ids)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, position_ids)
+        hidden_states = self.final_norm(hidden_states)
+        return self.lm_head(hidden_states)

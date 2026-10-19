@@ -1,6 +1,6 @@
 import torch
 
-from model import RMSNorm, RotaryPositionalEmbedding, TokenEmbedding, TransformerBlock
+from model import MiniMistralDecoder, RMSNorm, RotaryPositionalEmbedding
 
 
 if __name__ == "__main__":
@@ -12,15 +12,16 @@ if __name__ == "__main__":
     positional_sample = torch.tensor([[[[1.0, 0.0, 1.0, 0.0]]]])
     print(f"RoPE output: {rope(positional_sample, torch.tensor([1]))}")
 
-    block = TransformerBlock(
+    model = MiniMistralDecoder(
+        vocab_size=32_000,
         dim=128,
+        n_layers=2,
         n_heads=4,
         n_kv_heads=2,
         window_size=4,
         hidden_dim=256,
     )
-    token_embedding = TokenEmbedding(vocab_size=32_000, dim=128)
     token_ids = torch.tensor([[12, 95, 7, 33, 90, 11]])
-    tokens = token_embedding(token_ids)
-    print(f"Token embedding output shape: {tokens.shape}")
-    print(f"Transformer block output shape: {block(tokens).shape}")
+    logits = model(token_ids)
+    print(f"Logits shape: {logits.shape}")
+    print(f"Highest-scoring next token ID: {logits[0, -1].argmax().item()}")

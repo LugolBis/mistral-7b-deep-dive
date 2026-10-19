@@ -6,7 +6,9 @@ The project is also building an educational, from-scratch Python reimplementatio
 of the Mistral 7B decoder. It is currently in progress: token embeddings,
 RMSNorm, RoPE, causal Grouped-Query Sliding-Window Attention, SwiGLU, and a
 pre-normalized Transformer block with residual connections are implemented,
-but this is not yet a complete decoder.
+along with an educational decoder that produces next-token logits. It does not
+yet include a tokenizer, KV cache, or text-generation loop, and its weights are
+randomly initialized rather than pretrained.
 
 ## Repository structure
 
@@ -32,7 +34,7 @@ The presentation could be compiled as *PDF* using :
 typst compile doc/presentation.typ
 ```
 
-To run the current component and Transformer block example:
+To run the miniature decoder example:
 ```bash
 uv run python src/main.py
 ```

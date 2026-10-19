@@ -4,6 +4,7 @@ import torch
 
 from src.model import (
     GroupedQueryAttention,
+    MiniMistralDecoder,
     RMSNorm,
     RotaryPositionalEmbedding,
     SwiGLU,
@@ -273,6 +274,61 @@ class TokenEmbeddingTests(unittest.TestCase):
 
         self.assertIsNotNone(embedding.embedding.weight.grad)
         self.assertTrue(torch.isfinite(embedding.embedding.weight.grad).all())
+
+
+class MiniMistralDecoderTests(unittest.TestCase):
+    def create_model(self) -> MiniMistralDecoder:
+        return MiniMistralDecoder(
+            vocab_size=32,
+            dim=16,
+            n_layers=2,
+            n_heads=4,
+            n_kv_heads=2,
+            window_size=4,
+            hidden_dim=32,
+        )
+
+    def test_maps_batch_of_token_sequences_to_logits(self) -> None:
+        model = self.create_model()
+
+        logits = model(torch.tensor([[1, 2, 3], [4, 5, 6]]))
+
+        self.assertEqual(logits.shape, (2, 3, 32))
+
+    def test_accepts_absolute_positions_for_prefill_chunks(self) -> None:
+        model = self.create_model()
+
+        logits = model(torch.tensor([[1, 2, 3]]), position_ids=torch.arange(10, 13))
+
+        self.assertEqual(logits.shape, (1, 3, 32))
+
+    def test_gradients_flow_from_logits_to_embeddings_and_layers(self) -> None:
+        model = self.create_model()
+
+        model(torch.tensor([[1, 2, 3]])).square().mean().backward()
+
+        self.assertIsNotNone(model.token_embedding.embedding.weight.grad)
+        self.assertIsNotNone(model.layers[0].attention.q_proj.weight.grad)
+        self.assertIsNotNone(model.layers[1].feed_forward.gate_proj.weight.grad)
+        self.assertIsNotNone(model.lm_head.weight.grad)
+
+    def test_requires_at_least_one_layer(self) -> None:
+        with self.assertRaises(ValueError):
+            MiniMistralDecoder(
+                vocab_size=32,
+                dim=16,
+                n_layers=0,
+                n_heads=4,
+                n_kv_heads=2,
+                window_size=4,
+                hidden_dim=32,
+            )
+
+    def test_rejects_empty_token_sequence(self) -> None:
+        model = self.create_model()
+
+        with self.assertRaises(ValueError):
+            model(torch.empty((1, 0), dtype=torch.long))
 
 
 if __name__ == "__main__":
