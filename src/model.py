@@ -246,3 +246,24 @@ class TransformerBlock(nn.Module):
 
         x = x + self.attention(self.attention_norm(x), position_ids)
         return x + self.feed_forward(self.feed_forward_norm(x))
+
+
+class TokenEmbedding(nn.Module):
+    """Map token IDs to learned vectors."""
+
+    def __init__(self, vocab_size: int, dim: int) -> None:
+        super().__init__()
+        if vocab_size <= 0 or dim <= 0:
+            raise ValueError("vocab_size and dim must be positive")
+
+        self.vocab_size = vocab_size
+        self.dim = dim
+        self.embedding = nn.Embedding(vocab_size, dim)
+
+    def forward(self, token_ids: Tensor) -> Tensor:
+        if token_ids.ndim != 2:
+            raise ValueError("token_ids must have shape (batch, seq)")
+        if token_ids.dtype not in (torch.int32, torch.int64):
+            raise TypeError("token_ids must have dtype torch.int32 or torch.int64")
+
+        return self.embedding(token_ids)

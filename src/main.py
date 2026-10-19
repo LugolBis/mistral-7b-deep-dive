@@ -1,6 +1,6 @@
 import torch
 
-from model import RMSNorm, RotaryPositionalEmbedding, TransformerBlock
+from model import RMSNorm, RotaryPositionalEmbedding, TokenEmbedding, TransformerBlock
 
 
 if __name__ == "__main__":
@@ -19,5 +19,8 @@ if __name__ == "__main__":
         window_size=4,
         hidden_dim=256,
     )
-    tokens = torch.randn(1, 6, 128)
+    token_embedding = TokenEmbedding(vocab_size=32_000, dim=128)
+    token_ids = torch.tensor([[12, 95, 7, 33, 90, 11]])
+    tokens = token_embedding(token_ids)
+    print(f"Token embedding output shape: {tokens.shape}")
     print(f"Transformer block output shape: {block(tokens).shape}")

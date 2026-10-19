@@ -7,6 +7,7 @@ from src.model import (
     RMSNorm,
     RotaryPositionalEmbedding,
     SwiGLU,
+    TokenEmbedding,
     TransformerBlock,
 )
 
@@ -222,6 +223,56 @@ class TransformerBlockTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             block(torch.randn(2, 8))
+
+
+class TokenEmbeddingTests(unittest.TestCase):
+    def test_maps_token_ids_to_their_learned_vectors(self) -> None:
+        embedding = TokenEmbedding(vocab_size=4, dim=3)
+        expected = torch.tensor(
+            [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6],
+             [0.7, 0.8, 0.9], [1.0, 1.1, 1.2]]
+        )
+        with torch.no_grad():
+            embedding.embedding.weight.copy_(expected)
+
+        result = embedding(torch.tensor([[2, 0], [3, 1]]))
+
+        expected_result = torch.stack((expected[[2, 0]], expected[[3, 1]]))
+        torch.testing.assert_close(result, expected_result)
+
+    def test_preserves_batch_and_sequence_shape(self) -> None:
+        embedding = TokenEmbedding(vocab_size=20, dim=8)
+
+        result = embedding(torch.randint(0, 20, (2, 5)))
+
+        self.assertEqual(result.shape, (2, 5, 8))
+
+    def test_supports_int32_token_ids(self) -> None:
+        embedding = TokenEmbedding(vocab_size=5, dim=4)
+
+        result = embedding(torch.tensor([[1, 3]], dtype=torch.int32))
+
+        self.assertEqual(result.shape, (1, 2, 4))
+
+    def test_rejects_non_integer_token_ids(self) -> None:
+        embedding = TokenEmbedding(vocab_size=5, dim=4)
+
+        with self.assertRaises(TypeError):
+            embedding(torch.tensor([[1.0, 2.0]]))
+
+    def test_rejects_input_without_batch_and_sequence_dimensions(self) -> None:
+        embedding = TokenEmbedding(vocab_size=5, dim=4)
+
+        with self.assertRaises(ValueError):
+            embedding(torch.tensor([1, 2]))
+
+    def test_embedding_weights_receive_gradients(self) -> None:
+        embedding = TokenEmbedding(vocab_size=5, dim=4)
+
+        embedding(torch.tensor([[1, 3]])).square().sum().backward()
+
+        self.assertIsNotNone(embedding.embedding.weight.grad)
+        self.assertTrue(torch.isfinite(embedding.embedding.weight.grad).all())
 
 
 if __name__ == "__main__":
