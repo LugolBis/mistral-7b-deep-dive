@@ -448,8 +448,9 @@ class MiniMistralDecoder(nn.Module):
         top_k: int | None = None,
         top_p: float = 1.0,
         generator: torch.Generator | None = None,
+        repetition_penalty: float = 1.0,
     ) -> Tensor:
-        """Generate greedily or sample using temperature, top-k, and top-p."""
+        """Generate greedily or sample with optional repetition and token filters."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -474,6 +475,11 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("top_p must be a finite number in (0, 1]")
         if generator is not None and not isinstance(generator, torch.Generator):
             raise TypeError("generator must be a torch.Generator")
+        if (
+            not math.isfinite(repetition_penalty)
+            or repetition_penalty <= 0
+        ):
+            raise ValueError("repetition_penalty must be a finite positive number")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -497,6 +503,19 @@ class MiniMistralDecoder(nn.Module):
 
         for step in range(max_new_tokens):
             next_token_logits = logits[:, -1, :]
+            if repetition_penalty != 1.0:
+                repeated_tokens = torch.zeros_like(
+                    next_token_logits, dtype=torch.bool
+                )
+                repeated_tokens.scatter_(1, generated.to(torch.long), True)
+                penalized_logits = torch.where(
+                    next_token_logits < 0,
+                    next_token_logits * repetition_penalty,
+                    next_token_logits / repetition_penalty,
+                )
+                next_token_logits = torch.where(
+                    repeated_tokens, penalized_logits, next_token_logits
+                )
             if temperature == 0:
                 next_token = next_token_logits.argmax(dim=-1, keepdim=True)
             else:

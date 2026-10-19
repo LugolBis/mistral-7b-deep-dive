@@ -22,7 +22,9 @@ whose cumulative probability reaches the requested threshold; it can be
 combined with `top_k`. For repeatable sampling, pass an explicitly seeded
 `torch.Generator`, for example `generator=torch.Generator().manual_seed(1234)`.
 This keeps sampling independent of PyTorch's global random-number state. The
-project does not yet include a tokenizer, and its weights are randomly
+optional `repetition_penalty` can discourage tokens already present in the
+prompt or generated text; its default value of `1.0` leaves scores unchanged.
+The project does not yet include a tokenizer, and its weights are randomly
 initialized rather than pretrained.
 
 ## Repository structure

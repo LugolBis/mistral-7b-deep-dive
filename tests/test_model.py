@@ -459,6 +459,75 @@ class MiniMistralDecoderTests(unittest.TestCase):
         self.assertEqual(generated[0, -1].item(), 5)
         multinomial.assert_not_called()
 
+    def test_repetition_penalty_changes_greedy_choice_for_seen_token(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[0, 1]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, 0] = 3.0
+        logits[0, -1, 2] = 2.0
+
+        with patch.object(model, "forward", return_value=logits):
+            generated = model.generate(
+                prompt, max_new_tokens=1, repetition_penalty=2.0
+            )
+
+        self.assertEqual(generated[0, -1].item(), 2)
+
+    def test_repetition_penalty_scales_seen_positive_and_negative_logits(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[0, 1]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, 0] = 4.0
+        logits[0, -1, 1] = -2.0
+        sampled = torch.tensor([[2]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            model.generate(
+                prompt,
+                max_new_tokens=1,
+                temperature=1.0,
+                repetition_penalty=2.0,
+            )
+
+        probabilities = multinomial.call_args.args[0]
+        expected_logits = logits[:, -1, :].clone()
+        expected_logits[0, 0] /= 2.0
+        expected_logits[0, 1] *= 2.0
+        torch.testing.assert_close(
+            probabilities, torch.softmax(expected_logits, dim=-1)
+        )
+
+    def test_repetition_penalty_one_preserves_greedy_output(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[0, 1]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, 0] = 3.0
+        logits[0, -1, 2] = 2.0
+
+        with patch.object(model, "forward", return_value=logits):
+            default = model.generate(prompt, max_new_tokens=1)
+            explicit_one = model.generate(
+                prompt, max_new_tokens=1, repetition_penalty=1.0
+            )
+
+        torch.testing.assert_close(default, explicit_one)
+
+    def test_rejects_invalid_repetition_penalty(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+
+        for penalty in (0.0, -1.0, float("inf"), float("nan")):
+            with self.subTest(penalty=penalty):
+                with self.assertRaises(ValueError):
+                    model.generate(
+                        prompt,
+                        max_new_tokens=1,
+                        repetition_penalty=penalty,
+                    )
+
     def test_top_k_sampling_assigns_probability_only_to_top_logits(self) -> None:
         model = self.create_model()
         prompt = torch.tensor([[1, 2]])
