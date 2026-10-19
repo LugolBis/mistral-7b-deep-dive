@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import Tensor, nn
 
@@ -442,8 +444,9 @@ class MiniMistralDecoder(nn.Module):
         eos_token_id: int | None = None,
         use_cache: bool = True,
         prefill_chunk_size: int | None = None,
+        temperature: float = 0.0,
     ) -> Tensor:
-        """Greedily generate tokens with optional cached, chunked prefill."""
+        """Generate tokens greedily or by temperature sampling."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -458,6 +461,8 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("prefill_chunk_size must be positive")
         if prefill_chunk_size is not None and not use_cache:
             raise ValueError("chunked prefill requires use_cache=True")
+        if not math.isfinite(temperature) or temperature < 0:
+            raise ValueError("temperature must be a finite, non-negative number")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -480,7 +485,14 @@ class MiniMistralDecoder(nn.Module):
         )
 
         for step in range(max_new_tokens):
-            next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
+            next_token_logits = logits[:, -1, :]
+            if temperature == 0:
+                next_token = next_token_logits.argmax(dim=-1, keepdim=True)
+            else:
+                probabilities = torch.softmax(
+                    next_token_logits / temperature, dim=-1
+                )
+                next_token = torch.multinomial(probabilities, num_samples=1)
 
             if eos_token_id is not None:
                 next_token = torch.where(

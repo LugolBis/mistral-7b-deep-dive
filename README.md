@@ -12,8 +12,11 @@ sliding window of keys and values, so generation only processes each new token
 after the initial prompt. Pass `use_cache=False` to `generate` to recompute the
 full context for comparison. The prompt can also be prefilled in smaller
 chunks with `prefill_chunk_size`, while preserving its absolute token positions
-and reusing the rolling cache between chunks. The project does not yet include
-a tokenizer, and its weights are randomly initialized rather than pretrained.
+and reusing the rolling cache between chunks. Generation is greedy by default;
+set a positive `temperature` to sample from the next-token probabilities.
+Higher temperatures make the distribution less concentrated, while zero keeps
+greedy selection. The project does not yet include a tokenizer, and its
+weights are randomly initialized rather than pretrained.
 
 ## Repository structure
 

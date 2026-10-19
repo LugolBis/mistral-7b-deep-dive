@@ -389,6 +389,54 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         torch.testing.assert_close(cached, uncached)
 
+    def test_temperature_sampling_uses_scaled_probabilities(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, :4] = torch.tensor([0.0, 1.0, 2.0, 3.0])
+        sampled = torch.tensor([[3]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            generated = model.generate(
+                prompt, max_new_tokens=1, temperature=2.0
+            )
+
+        torch.testing.assert_close(generated[:, -1:], sampled)
+        expected_probabilities = torch.softmax(logits[:, -1, :] / 2.0, dim=-1)
+        torch.testing.assert_close(
+            multinomial.call_args.args[0], expected_probabilities
+        )
+        self.assertEqual(multinomial.call_args.kwargs["num_samples"], 1)
+
+    def test_zero_temperature_keeps_greedy_generation(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.zeros(1, 2, 32)
+        logits[0, -1, 5] = 1.0
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial") as multinomial,
+        ):
+            generated = model.generate(prompt, max_new_tokens=1, temperature=0)
+
+        self.assertEqual(generated[0, -1].item(), 5)
+        multinomial.assert_not_called()
+
+    def test_rejects_invalid_temperature(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+
+        for temperature in (-1.0, float("inf"), float("nan")):
+            with self.subTest(temperature=temperature):
+                with self.assertRaises(ValueError):
+                    model.generate(
+                        prompt, max_new_tokens=1, temperature=temperature
+                    )
+
     def test_chunked_prefill_matches_single_chunk_generation(self) -> None:
         model = self.create_model()
         prompt = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]])
