@@ -97,6 +97,70 @@ class RotaryPositionalEmbedding(nn.Module):
         return rotated.flatten(-2)
 
 
+class KVCache:
+    """Per-layer rolling key/value cache with a fixed maximum length."""
+
+    def __init__(self, max_size: int) -> None:
+        if max_size <= 0:
+            raise ValueError("max_size must be positive")
+
+        self.max_size = max_size
+        self._layers: dict[int, tuple[Tensor, Tensor, Tensor]] = {}
+
+    def get(self, layer_idx: int) -> tuple[Tensor, Tensor, Tensor] | None:
+        """Return cached keys, values, and their absolute positions."""
+        return self._layers.get(layer_idx)
+
+    def update(
+        self,
+        layer_idx: int,
+        keys: Tensor,
+        values: Tensor,
+        position_ids: Tensor,
+    ) -> None:
+        if layer_idx < 0:
+            raise ValueError("layer_idx must be non-negative")
+        if keys.ndim != 4 or values.shape != keys.shape:
+            raise ValueError("keys and values must have matching (batch, heads, seq, dim) shapes")
+        if position_ids.ndim != 1 or position_ids.numel() != keys.shape[2]:
+            raise ValueError("position_ids must have shape (seq_len,)")
+        if position_ids.is_floating_point() or position_ids.is_complex():
+            raise TypeError("position_ids must have an integer dtype")
+        if position_ids.device != keys.device or values.device != keys.device:
+            raise ValueError("keys, values, and positions must use the same device")
+        if keys.dtype != values.dtype:
+            raise ValueError("keys and values must have the same dtype")
+        if position_ids.numel() == 0:
+            raise ValueError("cache updates must contain at least one position")
+        if torch.any(position_ids < 0):
+            raise ValueError("position_ids must be non-negative")
+        if position_ids.numel() > 1 and torch.any(position_ids[1:] <= position_ids[:-1]):
+            raise ValueError("position_ids in a cache update must be strictly increasing")
+
+        previous = self._layers.get(layer_idx)
+        if previous is not None:
+            previous_keys, previous_values, previous_positions = previous
+            if keys.shape[:2] != previous_keys.shape[:2] or keys.shape[3] != previous_keys.shape[3]:
+                raise ValueError("cache update has incompatible key/value dimensions")
+            if keys.dtype != previous_keys.dtype or keys.device != previous_keys.device:
+                raise ValueError("cache update must match the cached dtype and device")
+            if position_ids[0] <= previous_positions[-1]:
+                raise ValueError("cache positions must advance beyond the previous update")
+            keys = torch.cat((previous_keys, keys), dim=2)
+            values = torch.cat((previous_values, values), dim=2)
+            position_ids = torch.cat((previous_positions, position_ids))
+
+        self._layers[layer_idx] = (
+            keys[:, :, -self.max_size :],
+            values[:, :, -self.max_size :],
+            position_ids[-self.max_size :],
+        )
+
+    def clear(self) -> None:
+        """Remove cached state for all layers."""
+        self._layers.clear()
+
+
 class GroupedQueryAttention(nn.Module):
     """Causal sliding-window attention with grouped key/value heads."""
 
@@ -133,7 +197,13 @@ class GroupedQueryAttention(nn.Module):
         self.v_proj = nn.Linear(dim, kv_dim, bias=False)
         self.out_proj = nn.Linear(dim, dim, bias=False)
 
-    def forward(self, x: Tensor, position_ids: Tensor | None = None) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        position_ids: Tensor | None = None,
+        kv_cache: KVCache | None = None,
+        layer_idx: int | None = None,
+    ) -> Tensor:
         if not x.is_floating_point():
             raise TypeError("attention input must have a floating-point dtype")
         if x.ndim != 3:
@@ -143,8 +213,20 @@ class GroupedQueryAttention(nn.Module):
             raise ValueError(f"Expected input dimension {self.dim}, got {dim}")
         if seq_len == 0:
             raise ValueError("attention input must contain at least one token")
+        if kv_cache is not None:
+            if layer_idx is None:
+                raise ValueError("layer_idx is required when using a KV cache")
+            if kv_cache.max_size != self.window_size:
+                raise ValueError("KV cache size must match the attention window")
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=x.device)
+            start_position = 0
+            if kv_cache is not None:
+                cached = kv_cache.get(layer_idx)
+                if cached is not None:
+                    start_position = int(cached[2][-1].item()) + 1
+            position_ids = torch.arange(
+                start_position, start_position + seq_len, device=x.device
+            )
         elif position_ids.ndim != 1 or position_ids.numel() != seq_len:
             raise ValueError("position_ids must have shape (seq_len,)")
         elif position_ids.is_floating_point() or position_ids.is_complex():
@@ -153,7 +235,6 @@ class GroupedQueryAttention(nn.Module):
             raise ValueError("position_ids and input must be on the same device")
         elif torch.any(position_ids < 0):
             raise ValueError("position_ids must be non-negative")
-
         q = self.q_proj(x).view(
             batch_size, seq_len, self.n_heads, self.head_dim
         ).transpose(1, 2)
@@ -165,6 +246,20 @@ class GroupedQueryAttention(nn.Module):
         ).transpose(1, 2)
         q = self.rope(q, position_ids)
         k = self.rope(k, position_ids)
+        new_k, new_v = k, v
+
+        key_positions = position_ids
+        if kv_cache is not None:
+            cached = kv_cache.get(layer_idx)
+            if cached is not None:
+                cached_k, cached_v, cached_positions = cached
+                if cached_k.shape[:2] != k.shape[:2] or cached_k.shape[3] != self.head_dim:
+                    raise ValueError("KV cache dimensions do not match this attention layer")
+                if cached_k.dtype != k.dtype or cached_k.device != k.device:
+                    raise ValueError("KV cache dtype and device must match the attention input")
+                k = torch.cat((cached_k, k), dim=2)
+                v = torch.cat((cached_v, v), dim=2)
+                key_positions = torch.cat((cached_positions, position_ids))
 
         groups_per_kv_head = self.n_heads // self.n_kv_heads
         k = k.repeat_interleave(groups_per_kv_head, dim=1)
@@ -172,9 +267,9 @@ class GroupedQueryAttention(nn.Module):
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / self.head_dim**0.5
         query_positions = position_ids[:, None]
-        key_positions = position_ids[None, :]
-        allowed = (key_positions <= query_positions) & (
-            key_positions > query_positions - self.window_size
+        key_positions_for_mask = key_positions[None, :]
+        allowed = (key_positions_for_mask <= query_positions) & (
+            key_positions_for_mask > query_positions - self.window_size
         )
         scores = scores.masked_fill(
             ~allowed[None, None, :, :], torch.finfo(scores.dtype).min
@@ -184,7 +279,10 @@ class GroupedQueryAttention(nn.Module):
         attended = attended.transpose(1, 2).contiguous().view(
             batch_size, seq_len, self.dim
         )
-        return self.out_proj(attended)
+        output = self.out_proj(attended)
+        if kv_cache is not None:
+            kv_cache.update(layer_idx, new_k, new_v, position_ids)
+        return output
 
 
 class SwiGLU(nn.Module):
@@ -238,13 +336,21 @@ class TransformerBlock(nn.Module):
         self.feed_forward_norm = RMSNorm(dim, eps=norm_eps)
         self.feed_forward = SwiGLU(dim=dim, hidden_dim=hidden_dim)
 
-    def forward(self, x: Tensor, position_ids: Tensor | None = None) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        position_ids: Tensor | None = None,
+        kv_cache: KVCache | None = None,
+        layer_idx: int | None = None,
+    ) -> Tensor:
         if not x.is_floating_point():
             raise TypeError("TransformerBlock input must have a floating-point dtype")
         if x.ndim != 3:
             raise ValueError("TransformerBlock input must have shape (batch, seq, dim)")
 
-        x = x + self.attention(self.attention_norm(x), position_ids)
+        x = x + self.attention(
+            self.attention_norm(x), position_ids, kv_cache, layer_idx
+        )
         return x + self.feed_forward(self.feed_forward_norm(x))
 
 
@@ -305,7 +411,10 @@ class MiniMistralDecoder(nn.Module):
         self.lm_head = nn.Linear(dim, vocab_size, bias=False)
 
     def forward(
-        self, token_ids: Tensor, position_ids: Tensor | None = None
+        self,
+        token_ids: Tensor,
+        position_ids: Tensor | None = None,
+        kv_cache: KVCache | None = None,
     ) -> Tensor:
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
@@ -315,8 +424,13 @@ class MiniMistralDecoder(nn.Module):
             raise TypeError("token_ids must have dtype torch.int32 or torch.int64")
 
         hidden_states = self.token_embedding(token_ids)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, position_ids)
+        for layer_idx, layer in enumerate(self.layers):
+            hidden_states = layer(
+                hidden_states,
+                position_ids,
+                kv_cache,
+                layer_idx if kv_cache is not None else None,
+            )
         hidden_states = self.final_norm(hidden_states)
         return self.lm_head(hidden_states)
 
@@ -326,8 +440,9 @@ class MiniMistralDecoder(nn.Module):
         token_ids: Tensor,
         max_new_tokens: int,
         eos_token_id: int | None = None,
+        use_cache: bool = True,
     ) -> Tensor:
-        """Greedily append tokens, recomputing the full context at each step."""
+        """Greedily append tokens, optionally reusing a rolling KV cache."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -340,13 +455,19 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("eos_token_id must be within the vocabulary")
 
         generated = token_ids.clone()
+        if max_new_tokens == 0:
+            return generated
+
+        kv_cache = (
+            KVCache(self.layers[0].attention.window_size) if use_cache else None
+        )
+        positions = torch.arange(generated.shape[1], device=generated.device)
+        logits = self(generated, position_ids=positions, kv_cache=kv_cache)
         finished = torch.zeros(
             token_ids.shape[0], dtype=torch.bool, device=token_ids.device
         )
 
-        for _ in range(max_new_tokens):
-            positions = torch.arange(generated.shape[1], device=generated.device)
-            logits = self(generated, position_ids=positions)
+        for step in range(max_new_tokens):
             next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
 
             if eos_token_id is not None:
@@ -360,5 +481,18 @@ class MiniMistralDecoder(nn.Module):
             generated = torch.cat((generated, next_token), dim=1)
             if eos_token_id is not None and finished.all():
                 break
+            if step + 1 < max_new_tokens:
+                if kv_cache is None:
+                    positions = torch.arange(
+                        generated.shape[1], device=generated.device
+                    )
+                    logits = self(generated, position_ids=positions)
+                else:
+                    position = torch.tensor(
+                        [generated.shape[1] - 1], device=generated.device
+                    )
+                    logits = self(
+                        next_token, position_ids=position, kv_cache=kv_cache
+                    )
 
         return generated

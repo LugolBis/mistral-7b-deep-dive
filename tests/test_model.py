@@ -5,6 +5,7 @@ import torch
 
 from src.model import (
     GroupedQueryAttention,
+    KVCache,
     MiniMistralDecoder,
     RMSNorm,
     RotaryPositionalEmbedding,
@@ -12,6 +13,38 @@ from src.model import (
     TokenEmbedding,
     TransformerBlock,
 )
+
+
+class KVCacheTests(unittest.TestCase):
+    def test_keeps_only_the_most_recent_entries(self) -> None:
+        cache = KVCache(max_size=3)
+        keys = torch.arange(5.0).view(1, 1, 5, 1)
+        values = keys + 10
+
+        cache.update(0, keys, values, torch.arange(5))
+        cached_keys, cached_values, positions = cache.get(0)
+
+        torch.testing.assert_close(cached_keys, keys[:, :, -3:])
+        torch.testing.assert_close(cached_values, values[:, :, -3:])
+        torch.testing.assert_close(positions, torch.tensor([2, 3, 4]))
+
+    def test_appends_new_entries_and_clear_removes_all_layers(self) -> None:
+        cache = KVCache(max_size=3)
+        keys = torch.arange(2.0).view(1, 1, 2, 1)
+        cache.update(0, keys, keys, torch.tensor([0, 1]))
+        cache.update(0, keys + 2, keys + 2, torch.tensor([2, 3]))
+        self.assertIsNotNone(cache.get(0))
+
+        cache.clear()
+
+        self.assertIsNone(cache.get(0))
+
+    def test_rejects_non_increasing_positions(self) -> None:
+        cache = KVCache(max_size=3)
+        keys = torch.ones(1, 1, 2, 2)
+
+        with self.assertRaises(ValueError):
+            cache.update(0, keys, keys, torch.tensor([1, 1]))
 
 
 class RMSNormTests(unittest.TestCase):
@@ -161,6 +194,27 @@ class GroupedQueryAttentionTests(unittest.TestCase):
 
         torch.testing.assert_close(result[0, 1, 0], torch.tensor(2.0))
 
+    def test_cached_chunks_match_full_attention_and_keep_recent_positions(self) -> None:
+        attention = GroupedQueryAttention(
+            dim=8, n_heads=4, n_kv_heads=2, window_size=3
+        )
+        values = torch.randn(1, 7, 8)
+        positions = torch.arange(7)
+        expected = attention(values, position_ids=positions)
+        cache = KVCache(max_size=3)
+
+        first = attention(values[:, :2], kv_cache=cache, layer_idx=0)
+        middle = attention(
+            values[:, 2:5], kv_cache=cache, layer_idx=0
+        )
+        last = attention(values[:, 5:], kv_cache=cache, layer_idx=0)
+        actual = torch.cat((first, middle, last), dim=1)
+
+        torch.testing.assert_close(actual, expected)
+        cached = cache.get(0)
+        self.assertIsNotNone(cached)
+        torch.testing.assert_close(cached[2], torch.tensor([4, 5, 6]))
+
 
 class SwiGLUTests(unittest.TestCase):
     def test_preserves_batch_and_sequence_dimensions(self) -> None:
@@ -303,6 +357,38 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         self.assertEqual(logits.shape, (1, 3, 32))
 
+    def test_cached_incremental_logits_match_full_forward(self) -> None:
+        model = self.create_model()
+        token_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]])
+        positions = torch.arange(token_ids.shape[1])
+        cache = KVCache(max_size=4)
+
+        with torch.inference_mode():
+            expected = model(token_ids, position_ids=positions)
+            chunks = [model(token_ids[:, :3], kv_cache=cache)]
+            chunks.extend(
+                model(
+                    token_ids[:, index : index + 1],
+                    kv_cache=cache,
+                )
+                for index in range(3, token_ids.shape[1])
+            )
+
+        torch.testing.assert_close(torch.cat(chunks, dim=1), expected)
+        for layer_idx in range(len(model.layers)):
+            cached = cache.get(layer_idx)
+            self.assertIsNotNone(cached)
+            torch.testing.assert_close(cached[2], torch.tensor([3, 4, 5, 6]))
+
+    def test_generation_with_and_without_cache_matches(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2, 3, 4, 5]])
+
+        cached = model.generate(prompt, max_new_tokens=4)
+        uncached = model.generate(prompt, max_new_tokens=4, use_cache=False)
+
+        torch.testing.assert_close(cached, uncached)
+
     def test_gradients_flow_from_logits_to_embeddings_and_layers(self) -> None:
         model = self.create_model()
 
@@ -369,7 +455,10 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         with patch.object(model, "forward", side_effect=predictable_logits):
             generated = model.generate(
-                torch.tensor([[1], [2]]), max_new_tokens=5, eos_token_id=0
+                torch.tensor([[1], [2]]),
+                max_new_tokens=5,
+                eos_token_id=0,
+                use_cache=False,
             )
 
         self.assertEqual(generated.shape, (2, 4))

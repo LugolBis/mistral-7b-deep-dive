@@ -7,8 +7,11 @@ of the Mistral 7B decoder. It is currently in progress: token embeddings,
 RMSNorm, RoPE, causal Grouped-Query Sliding-Window Attention, SwiGLU, and a
 pre-normalized Transformer block with residual connections are implemented,
 along with an educational decoder that produces next-token logits and performs
-greedy generation. It does not yet include a tokenizer or KV cache, and its
-weights are randomly initialized rather than pretrained.
+greedy generation with a per-layer rolling KV cache. The cache keeps at most one
+sliding window of keys and values, so generation only processes each new token
+after the initial prompt. Pass `use_cache=False` to `generate` to recompute the
+full context for comparison. The project does not yet include a tokenizer, and
+its weights are randomly initialized rather than pretrained.
 
 ## Repository structure
 
