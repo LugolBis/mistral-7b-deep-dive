@@ -463,6 +463,59 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         self.assertTrue(torch.all(multinomial.call_args.args[0] > 0))
 
+    def test_top_p_keeps_smallest_set_reaching_probability_threshold(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.full((1, 2, 32), float("-inf"))
+        logits[0, -1, :4] = torch.tensor([4.0, 3.0, 2.0, 1.0])
+        sampled = torch.tensor([[0]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            generated = model.generate(
+                prompt, max_new_tokens=1, temperature=1.0, top_p=0.8
+            )
+
+        probabilities = multinomial.call_args.args[0]
+        torch.testing.assert_close(generated[:, -1:], sampled)
+        self.assertTrue(torch.all(probabilities[0, :2] > 0))
+        self.assertTrue(torch.all(probabilities[0, 2:] == 0))
+        torch.testing.assert_close(probabilities.sum(), torch.tensor(1.0))
+
+    def test_top_p_is_applied_after_top_k(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+        logits = torch.full((1, 2, 32), float("-inf"))
+        logits[0, -1, :4] = torch.tensor([4.0, 3.0, 2.0, 1.0])
+        sampled = torch.tensor([[0]])
+
+        with (
+            patch.object(model, "forward", return_value=logits),
+            patch("src.model.torch.multinomial", return_value=sampled) as multinomial,
+        ):
+            model.generate(
+                prompt,
+                max_new_tokens=1,
+                temperature=1.0,
+                top_k=3,
+                top_p=0.8,
+            )
+
+        probabilities = multinomial.call_args.args[0]
+        self.assertTrue(torch.all(probabilities[0, :2] > 0))
+        self.assertTrue(torch.all(probabilities[0, 2:] == 0))
+
+    def test_rejects_invalid_top_p(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2]])
+
+        for top_p in (0.0, -0.1, 1.1, float("inf"), float("nan")):
+            with self.subTest(top_p=top_p):
+                with self.assertRaises(ValueError):
+                    model.generate(prompt, max_new_tokens=1, top_p=top_p)
+
     def test_rejects_invalid_top_k(self) -> None:
         model = self.create_model()
         prompt = torch.tensor([[1, 2]])

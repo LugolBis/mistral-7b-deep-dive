@@ -446,8 +446,9 @@ class MiniMistralDecoder(nn.Module):
         prefill_chunk_size: int | None = None,
         temperature: float = 0.0,
         top_k: int | None = None,
+        top_p: float = 1.0,
     ) -> Tensor:
-        """Generate greedily or sample using temperature and optional top-k."""
+        """Generate greedily or sample using temperature, top-k, and top-p."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -468,6 +469,8 @@ class MiniMistralDecoder(nn.Module):
             not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0
         ):
             raise ValueError("top_k must be a positive integer")
+        if not math.isfinite(top_p) or not 0 < top_p <= 1:
+            raise ValueError("top_p must be a finite number in (0, 1]")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -507,6 +510,23 @@ class MiniMistralDecoder(nn.Module):
                 probabilities = torch.softmax(
                     next_token_logits / temperature, dim=-1
                 )
+                if top_p < 1:
+                    sorted_probabilities, sorted_indices = probabilities.sort(
+                        dim=-1, descending=True
+                    )
+                    cumulative_probabilities = sorted_probabilities.cumsum(dim=-1)
+                    remove_sorted = (
+                        cumulative_probabilities - sorted_probabilities >= top_p
+                    )
+                    filtered_sorted_probabilities = sorted_probabilities.masked_fill(
+                        remove_sorted, 0.0
+                    )
+                    probabilities = torch.zeros_like(probabilities).scatter(
+                        -1, sorted_indices, filtered_sorted_probabilities
+                    )
+                    probabilities = probabilities / probabilities.sum(
+                        dim=-1, keepdim=True
+                    )
                 next_token = torch.multinomial(probabilities, num_samples=1)
 
             if eos_token_id is not None:

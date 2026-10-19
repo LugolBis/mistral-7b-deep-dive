@@ -17,8 +17,10 @@ set a positive `temperature` to sample from the next-token probabilities.
 Higher temperatures make the distribution less concentrated, while zero keeps
 greedy selection. Sampling can be restricted to the `top_k` highest-scoring
 tokens; if `top_k` exceeds the vocabulary size, all tokens remain eligible.
-The project does not yet include a tokenizer, and its weights are randomly
-initialized rather than pretrained.
+The `top_p` option (nucleus sampling) instead keeps the smallest set of tokens
+whose cumulative probability reaches the requested threshold; it can be
+combined with `top_k`. The project does not yet include a tokenizer, and its
+weights are randomly initialized rather than pretrained.
 
 ## Repository structure
 
