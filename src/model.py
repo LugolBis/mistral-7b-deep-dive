@@ -441,8 +441,9 @@ class MiniMistralDecoder(nn.Module):
         max_new_tokens: int,
         eos_token_id: int | None = None,
         use_cache: bool = True,
+        prefill_chunk_size: int | None = None,
     ) -> Tensor:
-        """Greedily append tokens, optionally reusing a rolling KV cache."""
+        """Greedily generate tokens with optional cached, chunked prefill."""
         if token_ids.ndim != 2:
             raise ValueError("token_ids must have shape (batch, seq)")
         if token_ids.shape[1] == 0:
@@ -453,6 +454,10 @@ class MiniMistralDecoder(nn.Module):
             raise ValueError("max_new_tokens must be non-negative")
         if eos_token_id is not None and not 0 <= eos_token_id < self.vocab_size:
             raise ValueError("eos_token_id must be within the vocabulary")
+        if prefill_chunk_size is not None and prefill_chunk_size <= 0:
+            raise ValueError("prefill_chunk_size must be positive")
+        if prefill_chunk_size is not None and not use_cache:
+            raise ValueError("chunked prefill requires use_cache=True")
 
         generated = token_ids.clone()
         if max_new_tokens == 0:
@@ -461,8 +466,15 @@ class MiniMistralDecoder(nn.Module):
         kv_cache = (
             KVCache(self.layers[0].attention.window_size) if use_cache else None
         )
-        positions = torch.arange(generated.shape[1], device=generated.device)
-        logits = self(generated, position_ids=positions, kv_cache=kv_cache)
+        chunk_size = prefill_chunk_size or generated.shape[1]
+        for start in range(0, generated.shape[1], chunk_size):
+            end = min(start + chunk_size, generated.shape[1])
+            positions = torch.arange(start, end, device=generated.device)
+            logits = self(
+                generated[:, start:end],
+                position_ids=positions,
+                kv_cache=kv_cache,
+            )
         finished = torch.zeros(
             token_ids.shape[0], dtype=torch.bool, device=token_ids.device
         )

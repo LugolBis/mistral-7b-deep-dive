@@ -10,8 +10,10 @@ along with an educational decoder that produces next-token logits and performs
 greedy generation with a per-layer rolling KV cache. The cache keeps at most one
 sliding window of keys and values, so generation only processes each new token
 after the initial prompt. Pass `use_cache=False` to `generate` to recompute the
-full context for comparison. The project does not yet include a tokenizer, and
-its weights are randomly initialized rather than pretrained.
+full context for comparison. The prompt can also be prefilled in smaller
+chunks with `prefill_chunk_size`, while preserving its absolute token positions
+and reusing the rolling cache between chunks. The project does not yet include
+a tokenizer, and its weights are randomly initialized rather than pretrained.
 
 ## Repository structure
 

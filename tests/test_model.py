@@ -389,6 +389,49 @@ class MiniMistralDecoderTests(unittest.TestCase):
 
         torch.testing.assert_close(cached, uncached)
 
+    def test_chunked_prefill_matches_single_chunk_generation(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]])
+        expected = model.generate(prompt, max_new_tokens=4)
+
+        for chunk_size in (1, 2, 4, 20):
+            with self.subTest(chunk_size=chunk_size):
+                actual = model.generate(
+                    prompt,
+                    max_new_tokens=4,
+                    prefill_chunk_size=chunk_size,
+                )
+
+                torch.testing.assert_close(actual, expected)
+
+    def test_prefill_chunk_size_bounds_forward_sequence_length(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2, 3, 4, 5]])
+
+        with patch.object(model, "forward", wraps=model.forward) as forward:
+            model.generate(
+                prompt, max_new_tokens=2, prefill_chunk_size=2
+            )
+
+        processed_lengths = [
+            call.args[0].shape[1] for call in forward.call_args_list
+        ]
+        self.assertEqual(processed_lengths, [2, 2, 1, 1])
+
+    def test_rejects_invalid_chunked_prefill_options(self) -> None:
+        model = self.create_model()
+        prompt = torch.tensor([[1, 2, 3]])
+
+        with self.assertRaises(ValueError):
+            model.generate(prompt, max_new_tokens=1, prefill_chunk_size=0)
+        with self.assertRaises(ValueError):
+            model.generate(
+                prompt,
+                max_new_tokens=1,
+                use_cache=False,
+                prefill_chunk_size=2,
+            )
+
     def test_gradients_flow_from_logits_to_embeddings_and_layers(self) -> None:
         model = self.create_model()
 
