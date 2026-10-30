@@ -160,7 +160,41 @@
 ]
 
 #slide(title: "Conclusion", outlined: true)[
-  *_TODO_*
+  #grid(
+    columns: (1fr, 1fr),
+    column-gutter: 0.6cm,
+    [
+      #figtitle[Cache d'une séquence selon sa longueur]
+      #OptiGQA
+
+      #cap[Linéaire en N : GQA divise par 4.\ À 32 K tokens : 16 → 4 → 0,5 Gio.]
+    ],
+    [
+      #figtitle[Scores d'attention calculés (par head et par layer)]
+      #OptiSWA
+
+      #cap[Classique : O(N²).\ SWA : O(N × W), donc linéaire en N au-delà de W.]
+    ],
+  )
+]
+
+#slide(title: "Conclusion", outlined: true)[
+  #grid(
+    columns: (1fr, 1fr),
+    column-gutter: 0.6cm,
+    [
+      #figtitle[Entrées stockées selon la longueur]
+      #OptiRolling
+
+      #cap[Le rolling buffer plafonne à W = 4096 :\ le stockage devient constant, ÷ 8 à 32 K tokens.]
+    ],
+    [
+      #figtitle[Taille logique de la matrice de scores (par head)]
+      #OptiPrefill
+
+      #cap[Le chunking remplace N × N par C × (W + C) = 34 M,\ constant dès que N > W.]
+    ],
+  )
 ]
 
 // Bibliography
