@@ -3,84 +3,104 @@
 #set page(width: auto, height: auto, margin: 8mm)
 #set text(size: 9pt)
 
-#let n = 6          // neurones par couche (input + 2 hidden)
-#let r = 4.5mm      // rayon des neurones
+// 1. Neural networks
+#let neurons-per-layer = 6
+#let neuron-radius = 4.5mm
+
+#let layer-specs = (
+  (name: "Input layer", fill: rgb("#959ce7")),
+  (name: "Layer 1", fill: rgb(221, 194, 82)),
+  (name: "Layer 2", fill: rgb(246, 219, 115)),
+  (name: "Output layer", fill: rgb(82, 221, 170)),
+)
 
 #let NN = [#diagram(
-    spacing: (48mm, 13mm),
-    node-stroke: 0.7pt,
-    edge-stroke: 0.4pt + luma(80),
-    {
-      // ---------- Noms des couches ----------
-      node((0, -1.2), text(size: 1 * r)[*Input layer*], stroke: none, fill: rgb("#959ce7"))
-      node((1, -1.2), text(size: 1 * r)[*Layer 1*], stroke: none, fill: rgb(221, 194, 82, 255))
-      node((2, -1.2), text(size: 1 * r)[*Layer 2*], stroke: none, fill: rgb(246, 219, 115, 255))
-      node((3, -1.2), text(size: 1 * r)[*Output layer*], stroke: none, fill: rgb(82, 221, 170, 255))
+  spacing: (48mm, 13mm),
+  node-stroke: 0.7pt,
+  edge-stroke: 0.4pt + luma(80),
+  {
+    for (layer-index, spec) in layer-specs.enumerate() {
+      node(
+        (layer-index, -1.2),
+        text(size: neuron-radius)[*#spec.name*],
+        stroke: none,
+        fill: spec.fill,
+      )
+    }
 
-      // ---------- Neurones ----------
-      // Input layer
-      for i in range(n) {
-        node((0, i), text(size: 1 * r)[$x_#(i + 1)$], shape: circle, radius: r, fill: rgb("#959ce7"))
-      }
-      // Hidden layer 1 et 2
-      for i in range(n) {
-        node((1, i), text(size: 1 * r)[$h^((1))_#(i + 1)$], shape: circle, radius: r, fill: rgb(221, 194, 82, 255))
-        node((2, i), text(size: 1 * r)[$h^((2))_#(i + 1)$], shape: circle, radius: r, fill: rgb(246, 219, 115, 255))
-      }
-      // Output layer (un seul neurone, centré verticalement)
-      node((3, (n - 1) / 2), text(size: 1 * r)[$hat(y)$], shape: circle, radius: r, fill: rgb(82, 221, 170, 255))
+    for neuron-index in range(neurons-per-layer) {
+      node(
+        (0, neuron-index),
+        text(size: neuron-radius)[$x_#(neuron-index + 1)$],
+        shape: circle,
+        radius: neuron-radius,
+        fill: layer-specs.at(0).fill,
+      )
+    }
 
-      // ---------- Arêtes pondérées (w0, w1, ...) ----------
-      let k = 0
-
-      // Input -> Layer 1
-      for i in range(n) {
-        for j in range(n) {
-          edge(
-            (0, i),
-            (1, j),
-            "->",
-            label: text(size: 5pt)[$w_(#k)$],
-            label-pos: 0.72,
-            label-fill: white,
-            label-sep: 1pt,
-          )
-          k += 1
-        }
-      }
-
-      // Layer 1 -> Layer 2
-      for i in range(n) {
-        for j in range(n) {
-          edge(
-            (1, i),
-            (2, j),
-            "->",
-            label: text(size: 5pt)[$w_(#k)$],
-            label-pos: 0.72,
-            label-fill: white,
-            label-sep: 1pt,
-          )
-          k += 1
-        }
-      }
-
-      // Layer 2 -> Output layer
-      for i in range(n) {
-        edge(
-          (2, i),
-          (3, (n - 1) / 2),
-          "->",
-          label: text(size: 5pt)[$w_(#k)$],
-          label-pos: 0.6,
-          label-fill: white,
-          label-sep: 1pt,
+    for neuron-index in range(neurons-per-layer) {
+      for hidden-layer in (1, 2) {
+        node(
+          (hidden-layer, neuron-index),
+          text(size: neuron-radius)[$h^((#hidden-layer))_#(neuron-index + 1)$],
+          shape: circle,
+          radius: neuron-radius,
+          fill: layer-specs.at(hidden-layer).fill,
         )
-        k += 1
       }
-    },
-  )
-]
+    }
+
+    let output-y = (neurons-per-layer - 1) / 2
+    node(
+      (3, output-y),
+      text(size: neuron-radius)[$hat(y)$],
+      shape: circle,
+      radius: neuron-radius,
+      fill: layer-specs.at(3).fill,
+    )
+
+    let weight-index = 0
+
+    for source-layer in (0, 1) {
+      for source-neuron in range(neurons-per-layer) {
+        for target-neuron in range(neurons-per-layer) {
+          edge(
+            (source-layer, source-neuron),
+            (source-layer + 1, target-neuron),
+            "->",
+            label: text(size: 5pt)[$w_(#weight-index)$],
+            label-pos: 0.72,
+            label-fill: white,
+            label-sep: 1pt,
+          )
+          weight-index += 1
+        }
+      }
+    }
+
+    for source-neuron in range(neurons-per-layer) {
+      edge(
+        (2, source-neuron),
+        (3, output-y),
+        "->",
+        label: text(size: 5pt)[$w_(#weight-index)$],
+        label-pos: 0.6,
+        label-fill: white,
+        label-sep: 1pt,
+      )
+      weight-index += 1
+    }
+  },
+)]
+
+// 2. Inference pipeline
+#let pipeline-steps = (
+  (label: [*Prompt*\ de $N$ tokens], fill: rgb("#959ce7")),
+  (label: [*Pre-fill*\ les tokens\ du prompt], fill: rgb("#eea189")),
+  (label: [*KV cache*\ ($K$, $V$)\ par Token\ par Layer], fill: rgb("#5cbefb")),
+  (label: [*Décodage*\ 1 Token/pas], fill: rgb(246, 219, 115)),
+  (label: [*Token*\ généré], fill: rgb(82, 221, 170)),
+)
 
 #let InferencePipeline = [#diagram(
   spacing: (48mm, 13mm),
@@ -89,16 +109,23 @@
   edge-stroke: 1.5pt + luma(80),
   node-corner-radius: 7pt,
   {
-    node((0, 0), [*Prompt*\ de $N$ tokens], shape: rect, fill: rgb("#959ce7"))
-    node((0.75, 0), [*Pre-fill*\ les tokens\ du prompt], shape: rect, fill: rgb("#eea189"))
-    node((1.5, 0), [*KV cache*\ ($K$, $V$)\ par Token\ par Layer], shape: rect, fill: rgb("#5cbefb"))
-    node((2.25, 0), [*Décodage*\ 1 Token/pas], shape: rect, fill: rgb(246, 219, 115, 255))
-    node((3, 0), [*Token*\ généré], shape: rect, fill: rgb(82, 221, 170, 255))
+    for (step-index, step) in pipeline-steps.enumerate() {
+      node(
+        (0.75 * step-index, 0),
+        step.label,
+        shape: rect,
+        fill: step.fill,
+      )
+    }
 
-    edge((0, 0), (0.75, 0), "->")
-    edge((0.75, 0), (1.5, 0), "->")
-    edge((1.5, 0), (2.25, 0), "->")
-    edge((2.25, 0), (3, 0), "->")
+    for step-index in range(pipeline-steps.len() - 1) {
+      edge(
+        (0.75 * step-index, 0),
+        (0.75 * (step-index + 1), 0),
+        "->",
+      )
+    }
+
     edge(
       (3, 0),
       (1.5, 0),
@@ -109,80 +136,91 @@
   },
 )]
 
+// 3. Sliding Window Attention (SWA)
 #let SWA = [
   #let build-diagram() = {
     let tokens = ("The", "cat", "sat", "on", "the", "mat")
     let layer-names = ("Input", "Layer 1", "Layer 2", "Output")
-    let W = 2
-    let n-tok = 6
-    let n-lay = 4
-    let focus = 5
-    let xs = 2
-    let ys = 0.6
-
-    let reaches = range(n-lay).map(L => {
-      let steps = n-lay - 1 - L
-      let start = calc.max(0, focus - W * steps)
-      range(start, focus + 1)
-    })
-    let in-cone(L, i) = i in reaches.at(L)
+    let attention-window = 2
+    let token-count = 6
+    let layer-count = 4
+    let focus-token-index = 5
+    let layer-dx = 2
+    let token-dy = 0.6
 
     let red-fill = rgb("#E8401C")
     let red-stroke = rgb("#A82712")
     let pale-fill = rgb("#FBE5DC")
     let pale-stroke = rgb("#D97742")
     let gray-edge = rgb("#C4C4C4")
-    let blue-head = rgb("#3A6EA5")
-    let blue-dark = rgb("#21416E")
-    let elems = ()
+    let header-fill = rgb("#3A6EA5")
+    let header-stroke = rgb("#21416E")
 
-    for L in range(n-lay) {
-      for i in range(n-tok) {
-        let on = in-cone(L, i)
-        elems.push(node(
-          (L * xs, i * ys),
-          text(size: 8.5pt, weight: "bold", fill: if on { white } else { rgb("#222") })[t#i],
-          stroke: (if on { red-stroke } else { pale-stroke }) + 1.3pt,
-          fill: if on { red-fill } else { pale-fill },
+    let attention-reach(layer-index) = {
+      let steps-back = layer-count - 1 - layer-index
+      let start-token = calc.max(0, focus-token-index - attention-window * steps-back)
+      range(start-token, focus-token-index + 1)
+    }
+    let in-attention-cone(layer-index, token-index) = token-index in attention-reach(layer-index)
+
+    let elements = ()
+
+    for layer-index in range(layer-count) {
+      for token-index in range(token-count) {
+        let highlighted = in-attention-cone(layer-index, token-index)
+        elements.push(node(
+          (layer-index * layer-dx, token-index * token-dy),
+          text(
+            size: 8.5pt,
+            weight: "bold",
+            fill: if highlighted { white } else { rgb("#222") },
+          )[t#token-index],
+          stroke: (if highlighted { red-stroke } else { pale-stroke }) + 1.3pt,
+          fill: if highlighted { red-fill } else { pale-fill },
           inset: 7pt,
           corner-radius: 50%,
         ))
       }
     }
 
-    for L in range(n-lay) {
-      elems.push(node(
-        (L * xs, -0.5),
+    for layer-index in range(layer-count) {
+      elements.push(node(
+        (layer-index * layer-dx, -0.5),
         box(
-          fill: blue-head,
-          stroke: blue-dark + 0.8pt,
+          fill: header-fill,
+          stroke: header-stroke + 0.8pt,
           inset: (x: 10pt, y: 4pt),
           radius: 4pt,
-          text(size: 9.5pt, weight: "bold", fill: white)[#layer-names.at(L)],
+          text(size: 9.5pt, weight: "bold", fill: white)[#layer-names.at(layer-index)],
         ),
-
         inset: 0pt,
       ))
     }
 
-    for i in range(n-tok) {
-      elems.push(node(
-        (-0.5, i * ys),
-        text(size: 9pt, style: "italic", fill: rgb("#333"))[#tokens.at(i)],
-
+    for token-index in range(token-count) {
+      elements.push(node(
+        (-0.5, token-index * token-dy),
+        text(size: 9pt, style: "italic", fill: rgb("#333"))[#tokens.at(token-index)],
         inset: 0pt,
       ))
     }
 
-    for L in range(n-lay - 1) {
-      for i in range(n-tok) {
-        for j in range(calc.max(0, i - W), i + 1) {
-          let on = in-cone(L + 1, i) and in-cone(L, j)
-          elems.push(edge(
-            (L * xs, j * ys),
-            ((L + 1) * xs, i * ys),
+    for layer-index in range(layer-count - 1) {
+      for target-token in range(token-count) {
+        for source-token in range(
+          calc.max(0, target-token - attention-window),
+          target-token + 1,
+        ) {
+          let highlighted = (
+            in-attention-cone(layer-index + 1, target-token) and in-attention-cone(layer-index, source-token)
+          )
+          elements.push(edge(
+            (layer-index * layer-dx, source-token * token-dy),
+            ((layer-index + 1) * layer-dx, target-token * token-dy),
             marks: "->",
-            stroke: (if on { red-fill } else { gray-edge }) + (if on { 1.5pt } else { 0.5pt }),
+            stroke: (
+              (if highlighted { red-fill } else { gray-edge }) + (if highlighted { 1.5pt } else { 0.5pt })
+            ),
           ))
         }
       }
@@ -192,12 +230,29 @@
       node-stroke: none,
       node-inset: 0pt,
       axes: (ltr, ttb),
-      ..elems,
+      ..elements,
     )
   }
 
-
   #build-diagram()
+]
+
+// 4. Prefill avec KV cache
+#let chunks = (
+  ("Chunk 1", ($t_1$, $t_2$, $t_3$, $t_4$)),
+  ("Chunk 2", ($t_5$, $t_6$, $t_7$, $t_8$)),
+  ("Chunk 3", ($t_9$, $t_10$, $t_11$, $t_12$)),
+)
+#let chunk-fill = rgb("#D7EBDD")
+#let kv-fill = rgb("#5cbefb")
+#let link-stroke = rgb("#356AC3")
+
+#let make-chunk-box(label, tokens) = [
+  #grid(
+    column-gutter: 5pt,
+    columns: 2,
+    [*#label*], table(inset: 7pt, columns: 4, ..tokens),
+  )
 ]
 
 #let PrefillCache = [
@@ -205,196 +260,86 @@
     node-stroke: 0.6pt,
     node-fill: white,
     spacing: (1.5em, 2.8em),
-
-    node(
-      (0, 0),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*Chunk 1*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_1$], [$t_2$], [$t_3$], [$t_4$],
-          ),
+    {
+      for (chunk-index, (chunk-label, chunk-tokens)) in chunks.enumerate() {
+        node(
+          (chunk-index, 0),
+          make-chunk-box(chunk-label, chunk-tokens),
+          fill: chunk-fill,
+          inset: 10pt,
         )
-      ],
-      fill: rgb("#D7EBDD"),
-      name: <c1>,
-      inset: 10pt,
-    ),
-
-    node(
-      (1, 0),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*Chunk 2*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_5$], [$t_6$], [$t_7$], [$t_8$],
-          ),
+        node(
+          (chunk-index, 1),
+          make-chunk-box("KV cache", chunk-tokens),
+          fill: kv-fill,
+          inset: 10pt,
         )
-      ],
-      fill: rgb("#D7EBDD"),
-      name: <c2>,
-      inset: 10pt,
-    ),
-
-    node(
-      (2, 0),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*Chunk 3*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_9$], [$t_10$], [$t_11$], [$t_12$],
-          ),
+        edge(
+          (chunk-index, 0),
+          (chunk-index, 1),
+          "->",
+          label: [SWA],
+          label-side: left,
         )
-      ],
-      fill: rgb("#D7EBDD"),
-      name: <c3>,
-      inset: 10pt,
-    ),
+      }
 
-    node(
-      (0, 1),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*KV cache*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_1$], [$t_2$], [$t_3$], [$t_4$],
-          ),
+      for chunk-index in range(1, chunks.len()) {
+        edge(
+          (chunk-index - 1, 1),
+          (chunk-index, 0),
+          "->",
+          bend: -10deg,
+          stroke: link-stroke,
+          label-side: right,
         )
-      ],
-      fill: rgb("#5cbefb"),
-      name: <kv1>,
-      inset: 10pt,
-    ),
-
-    node(
-      (1, 1),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*KV cache*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_5$], [$t_6$], [$t_7$], [$t_8$],
-          ),
-        )
-      ],
-      fill: rgb("#5cbefb"),
-      name: <kv2>,
-      inset: 10pt,
-    ),
-
-    node(
-      (2, 1),
-      [
-        #grid(
-          column-gutter: 5pt,
-          columns: 2,
-          [*KV cache*],
-          table(
-            inset: 7pt,
-            columns: 4,
-            [$t_9$], [$t_10$], [$t_11$], [$t_12$],
-          ),
-        )
-      ],
-      fill: rgb("#5cbefb"),
-      name: <kv3>,
-      inset: 10pt,
-    ),
-
-    edge(<c1>, <kv1>, "->", label: [SWA], label-side: left),
-    edge(<c2>, <kv2>, "->", label: [SWA], label-side: left),
-    edge(<c3>, <kv3>, "->", label: [SWA], label-side: left),
-
-    edge(<kv1>, <c2>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
-
-    edge(<kv2>, <c3>, "->", bend: -10deg, stroke: rgb("#356AC3"), label-side: right),
+      }
+    },
   )
 ]
+
+
+// 5. Grouped Query Attention (GQA)
 
 #let GQA = [
   #diagram(
     node-stroke: 0.4pt,
+    {
+      let query-fill = rgb("#f4d2f9")
+      let kv-fill = rgb("#5cbefb")
 
-    for idx_left in range(8) {
-      let label_query = idx_left + 1
-      let node_q = (0.45 * idx_left, 0)
-      let node_kv = if calc.odd(idx_left) {
-        (0.45 * idx_left, 2.5)
-      } else {
-        (0.45 * idx_left, 2)
+      for head-index in range(8) {
+        let query-label = head-index + 1
+        let query-position = (0.45 * head-index, 0)
+        let kv-position = if calc.odd(head-index) {
+          (0.45 * head-index, 2.5)
+        } else {
+          (0.45 * head-index, 2)
+        }
+
+        node(query-position, [$Q_(#query-label)$], fill: query-fill)
+        node(kv-position, [$K_(#query-label)$,$V_(#query-label)$], fill: kv-fill)
+        edge(query-position, kv-position, "->")
       }
 
-      node(
-        node_q,
-        [$Q_(#label_query)$],
-        fill: rgb("#f4d2f9"),
-      )
+      edge((3.55, -0.5), (3.55, 3), "-")
 
-      node(
-        node_kv,
-        [$K_(#label_query)$,$V_(#label_query)$],
-        fill: rgb("#5cbefb"),
-      )
+      node((20cm, 9cm), [Avec *GQA* on a donc :], stroke: none)
 
-      edge(
-        node_q,
-        node_kv,
-        "->",
-      )
-    },
+      let queries-per-kv = 4
+      for kv-index in range(2) {
+        let kv-label = kv-index + 1
+        let kv-position = (4.5 + 1.8 * kv-index, 2.25)
+        node(kv-position, [$K_(#kv-label)$,$V_(#kv-label)$], fill: kv-fill)
 
-    edge(
-      (3.55, -0.5),
-      (3.55, 3),
-      "-",
-    ),
-
-    node((20cm, 9cm), [Avec *GQA* on a donc :], stroke: none),
-
-    for idx_kv_right in range(2) {
-      let label_kv = idx_kv_right + 1
-      let node_kv = (4.5 + 1.8 * idx_kv_right, 2.25)
-
-      node(
-        node_kv,
-        [$K_(#label_kv)$,$V_(#label_kv)$],
-        fill: rgb("#5cbefb"),
-      )
-
-      for idx_q_right in range(4) {
-        let label_query = 4 * idx_kv_right + idx_q_right + 1
-        let node_q = (3.8 + 1.8 * idx_kv_right + 0.45 * idx_q_right, 0.5)
-
-        node(
-          node_q,
-          [$Q_(#label_query)$],
-          fill: rgb("#f4d2f9"),
-        )
-
-        edge(
-          node_q,
-          node_kv,
-          "->",
-        )
+        for query-offset in range(queries-per-kv) {
+          let query-label = queries-per-kv * kv-index + query-offset + 1
+          let query-position = (
+            3.8 + 1.8 * kv-index + 0.45 * query-offset,
+            0.5,
+          )
+          node(query-position, [$Q_(#query-label)$], fill: query-fill)
+          edge(query-position, kv-position, "->")
+        }
       }
     },
   )
