@@ -1,4 +1,5 @@
 #import "@preview/fletcher:0.5.8": diagram, edge, node
+#import "helpers.typ": *
 
 #set page(width: auto, height: auto, margin: 8mm)
 #set text(size: 9pt)
@@ -299,7 +300,6 @@
 
 
 // 5. Grouped Query Attention (GQA)
-
 #let GQA = [
   #diagram(
     node-stroke: 0.4pt,
@@ -344,3 +344,113 @@
     },
   )
 ]
+
+#let OptiGQA = [#plot(
+  w: 8.8cm,
+  h: 5.4cm,
+  xmin: 0,
+  xmax: 32768,
+  ymin: 0,
+  ymax: 16,
+  xticks: (0, 8192, 16384, 24576, 32768),
+  yticks: (0, 4, 8, 12, 16),
+  xfmt: v => str(int(v / 1024)) + " K",
+  yfmt: v => str(v),
+  xlab: "longueur de la séquence (tokens)",
+  ylab: "Gio",
+  series: (
+    (color: c-coralM, label: "MHA", pts: range(0, 32769, step: 4096).map(n => (n, n / 2048))),
+    (color: c-purpleM, label: "GQA", pts: range(0, 32769, step: 4096).map(n => (n, n / 8192))),
+  ),
+  notes: (
+    (x: 32768, y: 16, text: "16 Gio", dx: -1.2cm, dy: -0.45cm, color: c-coralM, dot: true),
+    (x: 32768, y: 4, text: "4 Gio", dx: -1.0cm, dy: -0.45cm, color: c-purpleM, dot: true),
+  ),
+)]
+
+#let OptiSWA = [#plot(
+  w: 9.6cm,
+  h: 4.8cm,
+  xmin: 0,
+  xmax: 32768,
+  ymin: 0,
+  ymax: 600,
+  xticks: (0, 8192, 16384, 24576, 32768),
+  yticks: (0, 200, 400, 600),
+  xfmt: v => str(int(v / 1024)) + " K",
+  yfmt: v => str(v),
+  xlab: "longueur de la séquence (W = 4096)",
+  ylab: "millions de scores",
+  series: (
+    (
+      color: c-coralM,
+      label: "classique : N(N+1)/2",
+      pts: range(0, 32769, step: 2048).map(n => (n, n * (n + 1) / 2 / 1000000)),
+    ),
+    (
+      color: c-tealM,
+      label: "SWA : ≈ N × W",
+      pts: range(0, 32769, step: 2048).map(n => (
+        n,
+        (if n <= 4096 { n * (n + 1) / 2 } else { 4096 * 4097 / 2 + (n - 4096) * 4096 }) / 1000000,
+      )),
+    ),
+  ),
+  notes: (
+    (x: 16384, y: 134.2, text: "134 M", dx: -1.2cm, dy: -0.35cm, color: c-coralD, dot: true),
+    (x: 16384, y: 58.7, text: "59 M (÷ 2,3)", dx: 0.2cm, dy: -0.5cm, color: c-tealD, dot: true),
+  ),
+)]
+
+#let OptiRolling = [#plot(
+  w: 6.6cm,
+  h: 4.4cm,
+  xmin: 0,
+  xmax: 32768,
+  ymin: 0,
+  ymax: 32768,
+  xticks: (0, 16384, 32768),
+  yticks: (0, 8192, 16384, 24576, 32768),
+  xfmt: v => str(int(v / 1024)) + " K",
+  yfmt: v => str(int(v / 1024)) + " K",
+  xlab: "longueur de la séquence (tokens)",
+  ylab: "entrées K,V par layer",
+  series: (
+    (color: c-coralM, label: "sans rolling buffer : N", pts: range(0, 32769, step: 2048).map(n => (n, n))),
+    (
+      color: c-purpleM,
+      label: "rolling buffer : min(N, W)",
+      pts: range(0, 32769, step: 2048).map(n => (n, calc.min(n, 4096))),
+    ),
+  ),
+  notes: (
+    (x: 32768, y: 4096, text: "÷ 8", dx: -0.9cm, dy: -0.5cm, color: c-tealD, dot: true),
+  ),
+)]
+
+#let OptiPrefill = [#plot(
+  w: 8.6cm,
+  h: 4.1cm,
+  xmin: 0,
+  xmax: 32768,
+  ymin: 0,
+  ymax: 1200,
+  xticks: (0, 8192, 16384, 24576, 32768),
+  yticks: (0, 300, 600, 900, 1200),
+  xfmt: v => str(int(v / 1024)) + " K",
+  yfmt: v => str(v),
+  xlab: "longueur du prompt N (W = C = 4096)",
+  ylab: "millions d'entrées",
+  series: (
+    (color: c-coralM, label: "sans chunking : N × N", pts: range(0, 32769, step: 4096).map(n => (n, n * n / 1000000))),
+    (
+      color: c-tealM,
+      label: "avec chunks : C × (W + C)",
+      pts: range(0, 32769, step: 4096).map(n => (n, (if n <= 4096 { n * n } else { 4096 * 8192 }) / 1000000)),
+    ),
+  ),
+  notes: (
+    (x: 32768, y: 1073.7, text: "1 074 M", dx: -1.5cm, dy: -0.1cm, color: c-coralD, dot: true),
+    (x: 32768, y: 33.6, text: "34 M, constant", dx: -2.4cm, dy: -0.5cm, color: c-tealD, dot: true),
+  ),
+)]
