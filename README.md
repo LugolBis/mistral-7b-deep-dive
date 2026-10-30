@@ -2,7 +2,30 @@
 
 This project is a deep dive into the research paper *Mistral 7B* (2023). It aims to explain, in accessible terms, why a 7-billion-parameter model can compete with much larger ones, by breaking down the architectural choices and optimizations described in the paper : Grouped-Query Attention, Sliding Window Attention, the rolling buffer cache, and pre-fill with chunking. The repository contains the slides of an oral presentation that walks through these ideas, with diagrams and worked examples.
 
-The project also includes a from-scratch Python reimplementation of the Mistral 7B decoder.
+The project is also building an educational, from-scratch Python reimplementation
+of the Mistral 7B decoder. It is currently in progress: token embeddings,
+RMSNorm, RoPE, causal Grouped-Query Sliding-Window Attention, SwiGLU, and a
+pre-normalized Transformer block with residual connections are implemented,
+along with an educational decoder that produces next-token logits and performs
+greedy generation with a per-layer rolling KV cache. The cache keeps at most one
+sliding window of keys and values, so generation only processes each new token
+after the initial prompt. Pass `use_cache=False` to `generate` to recompute the
+full context for comparison. The prompt can also be prefilled in smaller
+chunks with `prefill_chunk_size`, while preserving its absolute token positions
+and reusing the rolling cache between chunks. Generation is greedy by default;
+set a positive `temperature` to sample from the next-token probabilities.
+Higher temperatures make the distribution less concentrated, while zero keeps
+greedy selection. Sampling can be restricted to the `top_k` highest-scoring
+tokens; if `top_k` exceeds the vocabulary size, all tokens remain eligible.
+The `top_p` option (nucleus sampling) instead keeps the smallest set of tokens
+whose cumulative probability reaches the requested threshold; it can be
+combined with `top_k`. For repeatable sampling, pass an explicitly seeded
+`torch.Generator`, for example `generator=torch.Generator().manual_seed(1234)`.
+This keeps sampling independent of PyTorch's global random-number state. The
+optional `repetition_penalty` can discourage tokens already present in the
+prompt or generated text; its default value of `1.0` leaves scores unchanged.
+The project does not yet include a tokenizer, and its weights are randomly
+initialized rather than pretrained.
 
 ## Repository structure
 
@@ -28,7 +51,12 @@ The presentation could be compiled as *PDF* using :
 typst compile doc/presentation.typ
 ```
 
-To run the decoder:
+To run the miniature decoder example:
 ```bash
-python src/main.py
+uv run python src/main.py
+```
+
+To run its tests:
+```bash
+uv run python -m unittest discover -s tests
 ```
